@@ -2,4 +2,17 @@
 
 body {
   @apply bg-slate-50 text-slate-900 min-h-screen antialiased;
+  font-family: "SN Pro", sans-serif;
+}
+
+@font-face {
+  font-family: "Berky";
+  src: url("./assets/BERKY.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-berky: "Berky", sans-serif; 
 }
