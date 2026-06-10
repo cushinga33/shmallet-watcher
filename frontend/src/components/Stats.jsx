@@ -177,23 +177,11 @@ function adjustBudgetForView(budget, timeframe, view) {
     }
 }
 
-function adjustMonthlyIncomeForView(monthlyIncome, view) {
-    switch (view) {
-        case "week":
-            return monthlyIncome / 4.345;
-        case "month":
-            return monthlyIncome;
-        case "year":
-            return monthlyIncome * 12;
-        default:
-            return monthlyIncome;
-    }
-}
-
-function buildTimelineSnapshot({ range, categories, transactions, view, monthlyProfileIncome }) {
+function buildTimelineSnapshot({ range, categories, transactions, view, weeklyProfileIncome }) {
     const categoryById = new Map(categories.map((category) => [category.id, category]));
     const expenseCategories = categories.filter((category) => category.type === "expense");
     const shouldEstimateRecurring = view === "week";
+    const actualInRangeTransactions = transactions.filter((transaction) => isDateInRange(transaction.date, range));
     const inRangeTransactions = transactions.filter((transaction) =>
         shouldEstimateRecurring && transaction.timeframe && transaction.timeframe !== "Once"
             ? true
@@ -204,6 +192,7 @@ function buildTimelineSnapshot({ range, categories, transactions, view, monthlyP
     let totalExpense = 0;
 
     const spentByCategory = new Map();
+    const incomeByCategory = new Map();
 
     inRangeTransactions.forEach((transaction) => {
         const fallbackCategory = categoryById.get(transaction.category_id);
@@ -224,6 +213,20 @@ function buildTimelineSnapshot({ range, categories, transactions, view, monthlyP
         }
     });
 
+    actualInRangeTransactions.forEach((transaction) => {
+        const fallbackCategory = categoryById.get(transaction.category_id);
+        const categoryType = (transaction.category?.type || fallbackCategory?.type || "expense").toLowerCase();
+
+        if (categoryType !== "income") {
+            return;
+        }
+
+        if (typeof transaction.category_id === "number") {
+            const runningIncome = incomeByCategory.get(transaction.category_id) || 0;
+            incomeByCategory.set(transaction.category_id, runningIncome + toNumber(transaction.amount));
+        }
+    });
+
     const totalBudget = expenseCategories.reduce((total, category) => {
         const value = category.budget_limit;
         if (value === null || value === undefined || value === "") {
@@ -233,12 +236,38 @@ function buildTimelineSnapshot({ range, categories, transactions, view, monthlyP
         return total + toNumber(value);
     }, 0);
 
-    const incomeForView = view === "week" && Number.isFinite(monthlyProfileIncome)
-        ? adjustMonthlyIncomeForView(monthlyProfileIncome, view)
+    const actualIncomeInRange = Array.from(incomeByCategory.values()).reduce((sum, value) => sum + value, 0);
+    const estimatedIncomeForWeek = Number.isFinite(weeklyProfileIncome)
+        ? weeklyProfileIncome
         : totalIncome;
+    const incomeIsEstimated = view === "week" && actualIncomeInRange <= 0;
+    const incomeForView = incomeIsEstimated ? estimatedIncomeForWeek : actualIncomeInRange;
     const netAmount = incomeForView - totalExpense;
 
-    const categoryRows = expenseCategories.map((category) => {
+    const categoryRows = categories.map((category) => {
+        if (category.type === "income") {
+            const actualIncome = incomeByCategory.get(category.id) || 0;
+            const categoryTransactions = actualInRangeTransactions
+                .filter((transaction) => transaction.category_id === category.id)
+                .map((transaction) => ({
+                    ...transaction,
+                    adjustedAmount: toNumber(transaction.amount),
+                    isEstimated: false,
+                }));
+
+            return {
+                id: category.id,
+                name: category.name,
+                type: category.type,
+                icon: category.icon,
+                color: category.color,
+                spent: 0,
+                available: actualIncome,
+                hasBudget: false,
+                transactions: categoryTransactions,
+            };
+        }
+
         const spent = spentByCategory.get(category.id) || 0;
         const hasBudget = category.budget_limit !== null && category.budget_limit !== undefined && category.budget_limit !== "";
         const budget = hasBudget ? toNumber(category.budget_limit) : null;
@@ -256,6 +285,7 @@ function buildTimelineSnapshot({ range, categories, transactions, view, monthlyP
         return {
             id: category.id,
             name: category.name,
+            type: category.type,
             icon: category.icon,
             color: category.color,
             spent,
@@ -270,6 +300,7 @@ function buildTimelineSnapshot({ range, categories, transactions, view, monthlyP
             spent: totalExpense,
             income: incomeForView,
             net: netAmount,
+            incomeIsEstimated,
         },
         categoryRows,
     };
@@ -307,7 +338,7 @@ export function Stats() {
     const [cardsError, setCardsError] = useState("");
     const [transactionsLoading, setTransactionsLoading] = useState(true);
     const [transactionsError, setTransactionsError] = useState("");
-    const [monthlyProfileIncome, setMonthlyProfileIncome] = useState(null);
+    const [weeklyProfileIncome, setWeeklyProfileIncome] = useState(null);
     const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
 
     useEffect(() => {
@@ -388,7 +419,7 @@ export function Stats() {
         const loadProfileIncome = async () => {
             try {
                 const income = await fetchProfileIncomeApi();
-                setMonthlyProfileIncome(Number.isFinite(Number(income)) ? Number(income) : null);
+                setWeeklyProfileIncome(Number.isFinite(Number(income)) ? Number(income) : null);
             } catch {
                 // Keep timeline usable with transaction-derived income fallback.
             }
@@ -454,7 +485,7 @@ export function Stats() {
             categories,
             transactions,
             view: "week",
-            monthlyProfileIncome,
+            weeklyProfileIncome,
         });
 
         const monthData = buildTimelineSnapshot({
@@ -462,7 +493,7 @@ export function Stats() {
             categories,
             transactions,
             view: "month",
-            monthlyProfileIncome,
+            weeklyProfileIncome,
         });
 
         const yearData = buildTimelineSnapshot({
@@ -470,7 +501,7 @@ export function Stats() {
             categories,
             transactions,
             view: "year",
-            monthlyProfileIncome,
+            weeklyProfileIncome,
         });
 
         return [
@@ -478,7 +509,7 @@ export function Stats() {
             { id: "month", title: "This Month", data: monthData },
             { id: "year", title: "This Year", data: yearData },
         ];
-    }, [categories, transactions, monthlyProfileIncome]);
+    }, [categories, transactions, weeklyProfileIncome]);
 
     const allSlides = [{ id: "new-transaction", title: "New Transaction" }, ...timelineSlides];
     const slideCardClassName = "relative z-20 flex flex-1 h-full items-center justify-center bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm";

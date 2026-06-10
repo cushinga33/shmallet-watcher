@@ -24,15 +24,15 @@ export function TimelineView({ title, timelineData, loading, error, formatCurren
                     <div className="grid grid-cols-3 gap-2">
                         <div className="bg-green-100 rounded-2xl p-2 text-center shadow-sm">
                             <p className="text-lg leading-none font-bold text-slate-700 truncate">{formatCurrency(timelineData.totals.spent)}</p>
-                            <p className="text-xs text-slate-500 uppercase tracking-wide">Expense</p>
+                            <p className="text-xs text-slate-500 uppercase tracking-wide">Spent</p>
                         </div>
                         <div className="bg-green-100 rounded-2xl p-2 text-center shadow-sm">
                             <p className="text-lg leading-none font-bold text-slate-700 truncate">{formatCurrency(timelineData.totals.income)}</p>
-                            <p className="text-xs text-slate-500 uppercase tracking-wide">{title==='This Week' && "Est."} Income</p>
+                            <p className="text-xs text-slate-500 uppercase tracking-wide">{timelineData.totals.incomeIsEstimated ? "Est. " : ""}Income</p>
                         </div>
                         <div className="bg-green-100 rounded-2xl p-2 text-center shadow-sm">
                             <p className="text-lg leading-none font-bold text-slate-700 truncate">{formatCurrency(timelineData.totals.net)}</p>
-                            <p className="text-xs text-slate-500 uppercase tracking-wide">Net</p>
+                            <p className="text-xs text-slate-500 uppercase tracking-wide">{timelineData.totals.incomeIsEstimated ? "Est. " : ""}Net</p>
                         </div>
                     </div>
 
@@ -45,20 +45,10 @@ export function TimelineView({ title, timelineData, loading, error, formatCurren
                         </div>
                         {timelineData.categoryRows.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-sm font-semibold text-slate-500 py-5">
-                                No expense categories yet.
+                                No categories yet.
                             </div>
                         ) : (
                             <ul className="flex flex-col gap-1 h-full overflow-y-auto pb-8">
-                                <li className="grid grid-cols-12 items-center bg-green-200/90 rounded-xl px-2 py-2 shadow-xs cursor-pointer">
-                                    <span className="col-span-5 font-semibold text-slate-700 truncate flex items-center gap-1.5">
-                                        <span className="w-5 h-5 shrink-0 flex items-center justify-center"><FaDollarSign/></span>
-                                        Totals
-                                    </span>
-                                    <span className="col-span-3 text-right font-semibold text-slate-700"> {formatCurrency(timelineData.totals.spent)}</span>
-                                    <span className="col-span-4 text-right font-semibold text-slate-600">
-                                        {formatCurrency(timelineData.totals.net)}
-                                    </span>
-                                </li>
                                 {timelineData.categoryRows.map((row) => (
                                     
                                     <div>
@@ -67,9 +57,9 @@ export function TimelineView({ title, timelineData, loading, error, formatCurren
                                                 <span className="w-5 h-5 shrink-0 flex items-center justify-center">{getCategoryIconByName(row.icon, userColorChoices[row.color])}</span>
                                                 {row.name}
                                             </span>
-                                            <span className="col-span-3 text-right font-semibold text-slate-700">{formatCurrency(row.spent)}</span>
-                                            <span className="col-span-4 text-right font-semibold text-slate-600">
-                                                {row.hasBudget ? formatCurrency(row.available) : "N/A"}
+                                            <span className="col-span-3 text-right font-semibold text-slate-700">{row.type === "income" ? "-" : formatCurrency(row.spent)}</span>
+                                            <span className="col-span-4 text-right font-semibold text-slate-600" style={row.type === "income" ? { color: "#34d399" } : {}}>
+                                                {row.type === "income" ? formatCurrency(row.available) : (row.hasBudget ? formatCurrency(row.available) : "N/A")}
                                             </span>
                                         </li>
                                         {expandedRowId === row.id && (

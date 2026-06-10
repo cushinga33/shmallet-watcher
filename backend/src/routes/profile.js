@@ -10,23 +10,23 @@ function toNumber(value) {
     return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function toMonthlyEquivalent(amount, timeframe) {
+function toWeeklyEquivalent(amount, timeframe) {
     switch (timeframe) {
         case 'Daily':
-            return amount * 30;
+            return amount * 7;
         case 'Weekly':
-            return amount * 4.345;
-        case 'Bi-Weekly':
-            return amount * 2;
-        case 'Monthly':
             return amount;
+        case 'Bi-Weekly':
+            return amount / 2;
+        case 'Monthly':
+            return amount / 4.345;
         case 'Once':
         default:
             return 0;
     }
 }
 
-function getInclusiveMonthSpan(dates) {
+function getInclusiveWeekSpan(dates) {
     if (!dates || dates.length === 0) {
         return 1;
     }
@@ -43,12 +43,12 @@ function getInclusiveMonthSpan(dates) {
         }
     });
 
-    const yearDelta = maxDate.getFullYear() - minDate.getFullYear();
-    const monthDelta = maxDate.getMonth() - minDate.getMonth();
-    return yearDelta * 12 + monthDelta + 1;
+    const millisecondsPerDay = 24 * 60 * 60 * 1000;
+    const daySpan = Math.floor((maxDate - minDate) / millisecondsPerDay);
+    return Math.floor(daySpan / 7) + 1;
 }
 
-async function calculateAverageMonthlyIncome(userId) {
+async function calculateAverageWeeklyIncome(userId) {
     const { data: incomeCategories, error: categoryError } = await supabase
         .from('categories')
         .select('id')
@@ -77,15 +77,15 @@ async function calculateAverageMonthlyIncome(userId) {
     const incomeTransactionDates = (incomeTransactions || [])
         .map((transaction) => new Date(transaction.date))
         .filter((date) => !Number.isNaN(date.getTime()));
-    const monthSpan = getInclusiveMonthSpan(incomeTransactionDates);
+    const weekSpan = getInclusiveWeekSpan(incomeTransactionDates);
 
-    const recurringMonthlyIncome = (incomeTransactions || []).reduce((sum, transaction) => {
+    const recurringWeeklyIncome = (incomeTransactions || []).reduce((sum, transaction) => {
         const amount = toNumber(transaction.amount);
         if ((transaction.timeframe || 'Once') === 'Once') {
             return sum;
         }
 
-        return sum + toMonthlyEquivalent(amount, transaction.timeframe);
+        return sum + toWeeklyEquivalent(amount, transaction.timeframe);
     }, 0);
 
     const onceIncomePastYear = (incomeTransactions || []).reduce((sum, transaction) => {
@@ -97,10 +97,10 @@ async function calculateAverageMonthlyIncome(userId) {
         return sum + toNumber(transaction.amount);
     }, 0);
 
-    const monthlyFromOneTimeIncome = onceIncomePastYear / monthSpan;
-    const averageMonthlyIncome = recurringMonthlyIncome + monthlyFromOneTimeIncome;
+    const weeklyFromOneTimeIncome = onceIncomePastYear / weekSpan;
+    const averageWeeklyIncome = recurringWeeklyIncome + weeklyFromOneTimeIncome;
 
-    return Number.parseFloat(averageMonthlyIncome.toFixed(2));
+    return Number.parseFloat(averageWeeklyIncome.toFixed(2));
 }
 
 async function upsertUserIncome(userId, income) {
@@ -142,7 +142,7 @@ router.get('/', async (req, res) => {
             return res.status(200).json({ income: toNumber(data.income), source: 'saved' });
         }
 
-        const calculatedIncome = await calculateAverageMonthlyIncome(userId);
+        const calculatedIncome = await calculateAverageWeeklyIncome(userId);
         const savedIncome = await upsertUserIncome(userId, calculatedIncome);
 
         return res.status(200).json({ income: savedIncome, source: 'calculated' });
@@ -181,7 +181,7 @@ router.post('/income/calculate', async (req, res) => {
     }
 
     try {
-        const calculatedIncome = await calculateAverageMonthlyIncome(userId);
+        const calculatedIncome = await calculateAverageWeeklyIncome(userId);
         const savedIncome = await upsertUserIncome(userId, calculatedIncome);
 
         return res.status(200).json({ income: savedIncome, source: 'calculated' });
