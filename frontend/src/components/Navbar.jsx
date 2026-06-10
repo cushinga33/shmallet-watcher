@@ -3,14 +3,16 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { supabase } from '../config/supabaseClient';
 import { IoMenu } from "react-icons/io5";
+import { clearAllCachedCollections } from '../services/resourceCache';
 
 const MENU_ANIMATION_MS = 300;
 const navLinkClasses = ({ isActive }) =>
   `block p-2 rounded-xl transition-colors ${isActive ? 'bg-green-100 font-semibold text-slate-700' : 'text-slate-600'}`;
 
 export function Navbar({ email }) {
-  const handleLogout = () => {
-    supabase.auth.signOut();
+  const handleLogout = async () => {
+    await clearAllCachedCollections();
+    await supabase.auth.signOut();
   };
 
   const [menuOpen, setMenuOpen] = React.useState(false);
@@ -109,7 +111,7 @@ export function Navbar({ email }) {
           <ul className="flex flex-col gap-4">
               <li><NavLink to="/" end className={navLinkClasses} onClick={closeMenu}>Dashboard</NavLink></li>
               <li><NavLink to="/transactions" className={navLinkClasses} onClick={closeMenu}>Transactions</NavLink></li>
-              <li><NavLink to="/files" className={navLinkClasses} onClick={closeMenu}>Files</NavLink></li>
+              <li><NavLink to="/files" className={navLinkClasses} onClick={closeMenu}>Upload Files</NavLink></li>
               <li><NavLink to="/settings" className={navLinkClasses} onClick={closeMenu}>Settings</NavLink></li>
           </ul>
           <button

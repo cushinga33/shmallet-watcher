@@ -1,55 +1,78 @@
-import { supabase } from "../config/supabaseClient";
+import { apiRequest } from "./apiClient";
+import { getCachedCollection, invalidateCachedCollection } from "./resourceCache";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const ACTIVE_RESOURCE_KEY = "cards";
+const ALL_RESOURCE_KEY = "cards:all";
 
-async function getAccessToken() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error("Session expired. Please log in again.");
-  }
-
-  return session.access_token;
+function sortCards(cards) {
+  return [...cards].sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function fetchCards() {
-  const accessToken = await getAccessToken();
+function getResourceKey(includeArchived) {
+  return includeArchived ? ALL_RESOURCE_KEY : ACTIVE_RESOURCE_KEY;
+}
 
-  const response = await fetch(`${API_BASE_URL}/api/cards`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+async function invalidateCardCaches() {
+  await Promise.all([
+    invalidateCachedCollection(ACTIVE_RESOURCE_KEY),
+    invalidateCachedCollection(ALL_RESOURCE_KEY),
+  ]);
+}
 
-  const data = await response.json();
+export async function fetchCards(options) {
+  const includeArchived = Boolean(options?.includeArchived);
+  const { includeArchived: _includeArchived, ...cacheOptions } = options || {};
 
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch cards.");
-  }
-
-  return data;
+  return getCachedCollection(
+    getResourceKey(includeArchived),
+    () => apiRequest(`/api/cards${includeArchived ? "?include_archived=true" : ""}`, { method: "GET" }),
+    cacheOptions,
+  );
 }
 
 export async function createCard(payload) {
-  const accessToken = await getAccessToken();
-
-  const response = await fetch(`${API_BASE_URL}/api/cards`, {
+  const data = await apiRequest("/api/cards", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
     body: JSON.stringify(payload),
   });
 
-  const data = await response.json();
+  await invalidateCardCaches();
+  return data.card;
+}
 
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to save card.");
-  }
+export async function updateCard(payload) {
+  const data = await apiRequest(`/api/cards/${payload.id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 
+  await invalidateCardCaches();
+  return data.card;
+}
+
+export async function deleteCard(cardId) {
+  const data = await apiRequest(`/api/cards/${cardId}`, {
+    method: "DELETE",
+  });
+
+  await invalidateCardCaches();
+  return data.card;
+}
+
+export async function archiveCard(cardId) {
+  const data = await apiRequest(`/api/cards/${cardId}/archive`, {
+    method: "PUT",
+  });
+
+  await invalidateCardCaches();
+  return data.card;
+}
+
+export async function unarchiveCard(cardId) {
+  const data = await apiRequest(`/api/cards/${cardId}/unarchive`, {
+    method: "PUT",
+  });
+
+  await invalidateCardCaches();
   return data.card;
 }

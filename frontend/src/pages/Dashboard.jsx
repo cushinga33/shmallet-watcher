@@ -9,10 +9,10 @@ export function Dashboard() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-1 justify-center">
       <div className="grid grid-cols-1 grid-rows-2 gap-8 items-center flex w-full px-2 pb-6">
-        <div className="flex flex-1 h-full items-center justify-center bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm">          
+        <div className="relative z-20 flex flex-1 h-full items-center justify-center w-full">          
           <Stats />
         </div>
-        <div className="md:col-span-1 flex flex-1 h-full w-full relative floatAnimation">
+        <div className="md:col-span-1 flex flex-1 h-full w-full relative floatAnimation pointer-events-none">
           <img src={Lilypad} alt="Lilypad" className="absolute -bottom-25 w-full h-full object-contain" />
           <FrogState weightState="super_fat" happiness={80} />
         </div>

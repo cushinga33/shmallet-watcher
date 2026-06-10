@@ -1,26 +1,282 @@
-import React, {useState, useEffect, useRef} from "react";
-import { FaChevronDown } from "react-icons/fa6";
-import { supabase } from "../config/supabaseClient";
-import FrogHead from '../assets/FrogHead.svg';
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { fetchCategories as fetchCategoriesApi } from "../services/categoryService";
 import { fetchCards as fetchCardsApi } from "../services/cardService";
+import {
+    createTransaction,
+    fetchTransactions as fetchTransactionsApi,
+} from "../services/transactionService";
+import { fetchProfileIncome as fetchProfileIncomeApi } from "../services/profileService";
+import { TimelineView } from "./stats/TimelineView";
+import { NewTransactionView } from "./stats/NewTransactionView";
 
 const getTodayDate = () => new Date().toISOString().split("T")[0];
 const STATUS_MESSAGE_TIMEOUT_MS = 3000;
+const SWIPE_THRESHOLD_PX = 40;
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+});
+
+function formatCurrency(amount) {
+    return currencyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+function toNumber(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getLocalDayBounds(dateValue) {
+    const date = new Date(dateValue);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function getCurrentWeekRange(referenceDate = new Date()) {
+    const start = getLocalDayBounds(referenceDate);
+    start.setDate(start.getDate() - start.getDay());
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function getCurrentMonthRange(referenceDate = new Date()) {
+    const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function getCurrentYearRange(referenceDate = new Date()) {
+    const start = new Date(referenceDate.getFullYear(), 0, 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(referenceDate.getFullYear(), 11, 31);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function parseTransactionDate(dateValue) {
+    if (typeof dateValue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        const [year, month, day] = dateValue.split("-").map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    return new Date(dateValue);
+}
+
+function isDateInRange(dateValue, range) {
+    const current = parseTransactionDate(dateValue);
+    if (Number.isNaN(current.getTime())) {
+        return false;
+    }
+
+    return current >= range.start && current <= range.end;
+}
+
+function adjustAmountForView(amount, timeframe, view) {
+    switch (view) {
+        case "week":
+            switch (timeframe) {
+                case "Daily":
+                    return amount * 7;
+                case "Monthly":
+                    return amount / 4.345;
+                case "Bi-Weekly":
+                    return amount / 2;
+                case "Weekly":
+                case "Once":
+                default:
+                    return amount;
+            }
+        case "month":
+            switch (timeframe) {
+                case "Daily":
+                    return amount * 30;
+                case "Weekly":
+                    return amount * 4.345;
+                case "Bi-Weekly":
+                    return amount * 2;
+                case "Monthly":
+                case "Once":
+                default:
+                    return amount;
+            }
+        case "year":
+            switch (timeframe) {
+                case "Daily":
+                    return amount * 365;
+                case "Weekly":
+                    return amount * 52;
+                case "Bi-Weekly":
+                    return amount * 26;
+                case "Monthly":
+                    return amount * 12;
+                case "Once":
+                default:
+                    return amount;
+            }
+        default:
+            return amount;
+    }
+}
+
+function adjustBudgetForView(budget, timeframe, view) {
+    switch (view) {
+        case "week":
+            switch (timeframe) {
+                case "Daily":
+                    return budget * 7;
+                case "Monthly":
+                    return budget / 4.345;
+                case "Bi-Weekly":
+                    return budget / 2;
+                case "Weekly":
+                case "Once":
+                default:
+                    return budget;
+            }
+        case "month":
+            switch (timeframe) {
+                case "Daily":
+                    return budget * 30;
+                case "Weekly":
+                    return budget * 4.345;
+                case "Bi-Weekly":
+                    return budget * 2;
+                case "Monthly":
+                case "Once":
+                default:
+                    return budget;
+            }
+        case "year":
+            switch (timeframe) {
+                case "Daily":
+                    return budget * 365;
+                case "Weekly":
+                    return budget * 52;
+                case "Bi-Weekly":
+                    return budget * 26;
+                case "Monthly":
+                    return budget * 12;
+                case "Once":
+                default:
+                    return budget;
+            }
+        default:
+            return budget;
+    }
+}
+
+function adjustMonthlyIncomeForView(monthlyIncome, view) {
+    switch (view) {
+        case "week":
+            return monthlyIncome / 4.345;
+        case "month":
+            return monthlyIncome;
+        case "year":
+            return monthlyIncome * 12;
+        default:
+            return monthlyIncome;
+    }
+}
+
+function buildTimelineSnapshot({ range, categories, transactions, view, monthlyProfileIncome }) {
+    const categoryById = new Map(categories.map((category) => [category.id, category]));
+    const expenseCategories = categories.filter((category) => category.type === "expense");
+    const shouldEstimateRecurring = view === "week";
+    const inRangeTransactions = transactions.filter((transaction) =>
+        shouldEstimateRecurring && transaction.timeframe && transaction.timeframe !== "Once"
+            ? true
+            : isDateInRange(transaction.date, range),
+    );
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+
+    const spentByCategory = new Map();
+
+    inRangeTransactions.forEach((transaction) => {
+        const fallbackCategory = categoryById.get(transaction.category_id);
+        const categoryType = (transaction.category?.type || fallbackCategory?.type || "expense").toLowerCase();
+        const amount = toNumber(transaction.amount);
+        const adjustedAmount = shouldEstimateRecurring
+            ? adjustAmountForView(amount, transaction.timeframe, view)
+            : amount;
+
+        if (categoryType === "income") {
+            totalIncome += adjustedAmount;
+            return;
+        }
+        totalExpense += adjustedAmount;
+        if (typeof transaction.category_id === "number") {
+            const runningSpent = spentByCategory.get(transaction.category_id) || 0;
+            spentByCategory.set(transaction.category_id, runningSpent + adjustedAmount);
+        }
+    });
+
+    const totalBudget = expenseCategories.reduce((total, category) => {
+        const value = category.budget_limit;
+        if (value === null || value === undefined || value === "") {
+            return total;
+        }
+
+        return total + toNumber(value);
+    }, 0);
+
+    const incomeForView = view === "week" && Number.isFinite(monthlyProfileIncome)
+        ? adjustMonthlyIncomeForView(monthlyProfileIncome, view)
+        : totalIncome;
+    const netAmount = incomeForView - totalExpense;
+
+    const categoryRows = expenseCategories.map((category) => {
+        const spent = spentByCategory.get(category.id) || 0;
+        const hasBudget = category.budget_limit !== null && category.budget_limit !== undefined && category.budget_limit !== "";
+        const budget = hasBudget ? toNumber(category.budget_limit) : null;
+        const available = hasBudget ? adjustBudgetForView(budget, category.timeframe, view) - spent : null;
+        const categoryTransactions = inRangeTransactions
+            .filter((transaction) => transaction.category_id === category.id)
+            .map((transaction) => ({
+                ...transaction,
+                adjustedAmount: shouldEstimateRecurring
+                    ? adjustAmountForView(toNumber(transaction.amount), transaction.timeframe, view)
+                    : toNumber(transaction.amount),
+                isEstimated: shouldEstimateRecurring && transaction.timeframe !== "Once",
+            }));
+
+        return {
+            id: category.id,
+            name: category.name,
+            icon: category.icon,
+            color: category.color,
+            spent,
+            available,
+            hasBudget,
+            transactions: categoryTransactions,
+        };
+    });
+
+    return {
+        totals: {
+            spent: totalExpense,
+            income: incomeForView,
+            net: netAmount,
+        },
+        categoryRows,
+    };
+}
 
 export function Stats() {
-    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
-    const stats = [
-        {Label: "Spent", Value: "$123.45"},
-        {Label: "Remaining", Value: "$376.55"},
-        {Label: "Budget", Value: "$500.00"},
-
-    ]
-    const types = [
-        "Expense",
-        "Income"
-    ]
+    const timeframes = ["Once", "Monthly", "Bi-Weekly", "Weekly", "Daily"];
 
     const [description, setDescription] = useState("");
     const [amount, setAmount] = useState("");
@@ -28,8 +284,12 @@ export function Stats() {
     const [category, setSelectedCategory] = useState(null);
     const [cards, setCards] = useState([]);
     const [card, setSelectedCard] = useState(null);
-    const [type, setSelectedType] = useState(0);
     const [date, setDate] = useState(getTodayDate);
+    const [timeframe, setTimeframe] = useState(0);
+    const [transactions, setTransactions] = useState([]);
+
+    const [currentSlide, setCurrentSlide] = useState(0);
+    const touchStartXRef = useRef(null);
 
     const [categoryModalOpen, setCategoryModalOpen] = useState(false);
     const categoryDropdownRef = useRef(null);
@@ -37,9 +297,19 @@ export function Stats() {
     const [cardModalOpen, setCardModalOpen] = useState(false);
     const cardDropdownRef = useRef(null);
 
-    const [typeModalOpen, setTypeModalOpen] = useState(false);
-    const typeDropdownRef = useRef(null);
-    
+    const [timeframeModalOpen, setTimeframeModalOpen] = useState(false);
+    const timeframeDropdownRef = useRef(null);
+
+    const [loading, setLoading] = useState(false);
+    const [categoriesLoading, setCategoriesLoading] = useState(true);
+    const [categoriesError, setCategoriesError] = useState("");
+    const [cardsLoading, setCardsLoading] = useState(true);
+    const [cardsError, setCardsError] = useState("");
+    const [transactionsLoading, setTransactionsLoading] = useState(true);
+    const [transactionsError, setTransactionsError] = useState("");
+    const [monthlyProfileIncome, setMonthlyProfileIncome] = useState(null);
+    const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+
     useEffect(() => {
         function handleClickOutside(event) {
             if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
@@ -50,8 +320,8 @@ export function Stats() {
                 setCardModalOpen(false);
             }
 
-            if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target)) {
-                setTypeModalOpen(false);
+            if (timeframeDropdownRef.current && !timeframeDropdownRef.current.contains(event.target)) {
+                setTimeframeModalOpen(false);
             }
         }
 
@@ -99,12 +369,33 @@ export function Stats() {
         loadCards();
     }, []);
 
-    const [loading, setLoading] = useState(false);
-    const [categoriesLoading, setCategoriesLoading] = useState(true);
-    const [categoriesError, setCategoriesError] = useState("");
-    const [cardsLoading, setCardsLoading] = useState(true);
-    const [cardsError, setCardsError] = useState("");
-    const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+    useEffect(() => {
+        const loadTransactions = async () => {
+            try {
+                const data = await fetchTransactionsApi();
+                setTransactions(data || []);
+            } catch (error) {
+                setTransactionsError(error.message);
+            } finally {
+                setTransactionsLoading(false);
+            }
+        };
+
+        loadTransactions();
+    }, []);
+
+    useEffect(() => {
+        const loadProfileIncome = async () => {
+            try {
+                const income = await fetchProfileIncomeApi();
+                setMonthlyProfileIncome(Number.isFinite(Number(income)) ? Number(income) : null);
+            } catch {
+                // Keep timeline usable with transaction-derived income fallback.
+            }
+        };
+
+        loadProfileIncome();
+    }, []);
 
     useEffect(() => {
         if (!statusMessage.message) {
@@ -118,149 +409,198 @@ export function Stats() {
         return () => window.clearTimeout(timeoutId);
     }, [statusMessage.message]);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async (event) => {
+        event.preventDefault();
         setLoading(true);
-        setStatusMessage({ type: '', message: '' });
+        setStatusMessage({ type: "", message: "" });
 
         if (!category) {
-            setStatusMessage({ type: 'error', message: 'Please select a category.' });
+            setStatusMessage({ type: "error", message: "Please select a category." });
             setLoading(false);
             return;
         }
 
         if (!card) {
-            setStatusMessage({ type: 'error', message: 'Please select a card.' });
+            setStatusMessage({ type: "error", message: "Please select a card." });
             setLoading(false);
             return;
         }
 
         try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) {
-                throw new Error('Not logged in!');
-            }
-            const token = session.access_token;
-
-            const response = await fetch(`${apiBaseUrl}/api/transactions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    description,
-                    amount: parseFloat(amount),
-                    date,
-                    card_id: card,
-                    category_id: category
-                })
+            const createdTransaction = await createTransaction({
+                description,
+                amount: Number.parseFloat(amount),
+                date,
+                card_id: card,
+                category_id: category,
+                timeframe: timeframes[timeframe],
             });
 
-        const result = await response.json();
-
-        if (!response.ok) {
-            throw new Error(result.error || 'Failed to submit transaction.');
-        }
-
-        setStatusMessage({ type: 'success', message: 'Transaction logged!' });
-        setDescription('');
-        setAmount('');
-        setDate(getTodayDate());
-        
+            setTransactions((current) => [createdTransaction, ...current]);
+            setStatusMessage({ type: "success", message: "Transaction logged!" });
+            setDescription("");
+            setAmount("");
+            setDate(getTodayDate());
         } catch (error) {
-        setStatusMessage({ type: 'error', message: error.message });
+            setStatusMessage({ type: "error", message: error.message });
         } finally {
-        setLoading(false);
+            setLoading(false);
         }
-    }
+    };
+
+    const timelineSlides = useMemo(() => {
+        const weekData = buildTimelineSnapshot({
+            range: getCurrentWeekRange(),
+            categories,
+            transactions,
+            view: "week",
+            monthlyProfileIncome,
+        });
+
+        const monthData = buildTimelineSnapshot({
+            range: getCurrentMonthRange(),
+            categories,
+            transactions,
+            view: "month",
+            monthlyProfileIncome,
+        });
+
+        const yearData = buildTimelineSnapshot({
+            range: getCurrentYearRange(),
+            categories,
+            transactions,
+            view: "year",
+            monthlyProfileIncome,
+        });
+
+        return [
+            { id: "week", title: "This Week", data: weekData },
+            { id: "month", title: "This Month", data: monthData },
+            { id: "year", title: "This Year", data: yearData },
+        ];
+    }, [categories, transactions, monthlyProfileIncome]);
+
+    const allSlides = [{ id: "new-transaction", title: "New Transaction" }, ...timelineSlides];
+    const slideCardClassName = "relative z-20 flex flex-1 h-full items-center justify-center bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm";
+
+    const goToSlide = (index) => {
+        if (index < 0) {
+            setCurrentSlide(allSlides.length - 1);
+            return;
+        }
+
+        if (index >= allSlides.length) {
+            setCurrentSlide(0);
+            return;
+        }
+
+        setCurrentSlide(index);
+        console.log(index);
+        console.log(allSlides[index]);
+    };
+
+    const handleTouchStart = (event) => {
+        touchStartXRef.current = event.touches[0]?.clientX ?? null;
+    };
+
+    const handleTouchEnd = (event) => {
+        const startX = touchStartXRef.current;
+        const endX = event.changedTouches[0]?.clientX ?? null;
+        touchStartXRef.current = null;
+
+        if (startX === null || endX === null) {
+            return;
+        }
+
+        const deltaX = endX - startX;
+        if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) {
+            return;
+        }
+
+        if (deltaX < 0) {
+            goToSlide(currentSlide + 1);
+            return;
+        }
+
+        goToSlide(currentSlide - 1);
+    };
 
     return (
-        <div className="flex flex-col h-full items-center justify-start gap-2">
-            <h1 className="text-lg self-start w-full font-semibold text-green-200 -mb-1">This Week</h1>
-            <div className="grid grid-cols-3 gap-4">
-                {stats.map((stat) => (
-                    <div key={stat.Label} className="bg-green-100 rounded-3xl px-4 py-2 flex flex-col items-center justify-between gap-1 aspect-2/1 w-full shadow-sm">
-                        <p className="text-2xl font-bold text-slate-700">{stat.Value}</p>
-                        <p className="text-md text-slate-600">{stat.Label}</p>
+        <div className="flex flex-col h-full items-center justify-start gap-2 z-100 w-full min-h-0">
+
+            <div
+                className="w-full flex-1 min-h-0"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+            >
+                <div
+                    className="flex transition-transform duration-300 ease-out h-full"
+                    style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+                >
+                    <div className={`w-full h-full shrink-0 ${allSlides[currentSlide].id === "new-transaction" ? "opacity-100" : "opacity-0"} transition-opacity duration-300 ease-out`}>
+                        <div className={slideCardClassName}>
+                            <NewTransactionView
+                                description={description}
+                                setDescription={setDescription}
+                                amount={amount}
+                                setAmount={setAmount}
+                                categories={categories}
+                                categoriesLoading={categoriesLoading}
+                                categoriesError={categoriesError}
+                                category={category}
+                                setSelectedCategory={setSelectedCategory}
+                                categoryModalOpen={categoryModalOpen}
+                                setCategoryModalOpen={setCategoryModalOpen}
+                                categoryDropdownRef={categoryDropdownRef}
+                                cards={cards}
+                                cardsLoading={cardsLoading}
+                                cardsError={cardsError}
+                                card={card}
+                                setSelectedCard={setSelectedCard}
+                                cardModalOpen={cardModalOpen}
+                                setCardModalOpen={setCardModalOpen}
+                                cardDropdownRef={cardDropdownRef}
+                                date={date}
+                                setDate={setDate}
+                                timeframe={timeframe}
+                                setTimeframe={setTimeframe}
+                                timeframeModalOpen={timeframeModalOpen}
+                                setTimeframeModalOpen={setTimeframeModalOpen}
+                                timeframeDropdownRef={timeframeDropdownRef}
+                                timeframes={timeframes}
+                                loading={loading}
+                                onSubmit={handleSubmit}
+                                statusMessage={statusMessage}
+                            />
+                        </div>
                     </div>
+                    {timelineSlides.map((slide) => (
+                        <div key={slide.id} className="w-full h-full shrink-0">
+                            <div className={`${slideCardClassName} ${slide.id === allSlides[currentSlide].id ? "opacity-100" : "opacity-0"} transition-opacity duration-300 ease-out`}>
+                                <TimelineView
+                                    title={slide.title}
+                                    timelineData={slide.data}
+                                    loading={categoriesLoading || transactionsLoading}
+                                    error={categoriesError || transactionsError}
+                                    formatCurrency={formatCurrency}
+                                />
+                            </div>
+                        </div>
+                    ))}
+
+                </div>
+            </div>
+            <div className="flex items-center gap-1">
+                {allSlides.map((slide, index) => (
+                    <button
+                        key={slide.id}
+                        type="button"
+                        onClick={() => goToSlide(index)}
+                        aria-label={`Go to ${slide.title}`}
+                        className={`h-2 rounded-full transition-all ${currentSlide === index ? "w-5 bg-green-100" : "w-2 bg-green-100/45"}`}
+                    />
                 ))}
             </div>
-            <form className="flex flex-col items-center justify-center gap-1 w-full" onSubmit={handleSubmit}>
-                <div className="grid grid-cols-8 grid-rows-3 gap-x-3 gap-y-1 w-full">
-                    {/* Description */}
-                    <div className="flex flex-col items-center justify-center w-full col-span-5">
-                        <h1 className="text-lg self-start w-full font-semibold text-green-200">Description</h1>
-                        <input type="text" className="bg-green-100 rounded-xl px-4 py-2 w-full shadow-sm" placeholder="Frog food, rent, etc." value={description} onChange={(e) => setDescription(e.target.value)} />
-                    </div>
-
-                    {/* Amount */}
-                    <div className="flex flex-col items-center justify-center w-full col-span-3">
-                        <h1 className="text-lg self-start w-full font-semibold text-green-200">Amount</h1>
-                        <input type="number" className="bg-green-100 rounded-xl px-4 py-2 w-full text-right shadow-sm" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                    </div>
-
-                    {/* Category */}
-                    <div ref={categoryDropdownRef} className="relative flex flex-col items-center justify-center w-full col-span-4 shadow-sm">
-                        <h1 className="text-lg self-start w-full font-semibold text-green-200">Category</h1>
-                        <button type="button" className="bg-green-100 font-semibold text-slate-600 py-2 px-4 rounded-xl w-full text-left flex items-center justify-between" onClick={() => setCategoryModalOpen((open) => !open)} disabled={categoriesLoading || categories.length === 0}>
-                            {categoriesLoading ? "Loading categories..." : categoriesError ? "Categories unavailable" : (categories.find((currentCategory) => currentCategory.id === category)?.name || "Select Category")}
-                            <FaChevronDown className={`ml-2 ${categoryModalOpen ? "transform rotate-180" : ""}`} />
-                        </button>
-                        {categoryModalOpen && !categoriesLoading && !categoriesError && (
-                            <div className="absolute top-full left-0 bg-green-100 rounded-xl shadow-lg py-1 mt-2 w-full z-20">
-                                {categories.map((categoryItem) => (
-                                    <div key={categoryItem.id} className="px-4 py-2 rounded cursor-pointer" onClick={() => {setSelectedCategory(categoryItem.id); setCategoryModalOpen(false)}}>
-                                        {categoryItem.name}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {categoriesError && <div className="text-xs text-rose-300 mt-1 w-full">{categoriesError}</div>}
-                    </div>
-
-                    {/* Card */}
-                    <div ref={cardDropdownRef} className="relative flex flex-col items-center justify-center w-full col-span-4 shadow-sm">
-                        <h1 className="text-lg self-start w-full font-semibold text-green-200">Card</h1>
-                        <button type="button" className="bg-green-100 font-semibold text-slate-600 py-2 px-4 rounded-xl w-full text-left flex items-center justify-between" onClick={() => setCardModalOpen((open) => !open)} disabled={cardsLoading || cards.length === 0}>
-                            {cardsLoading ? "Loading cards..." : cardsError ? "Cards unavailable" : (cards.find((currentCard) => currentCard.id === card)?.name || "Select Card")}
-                            <FaChevronDown className={`ml-2 ${cardModalOpen ? "transform rotate-180" : ""}`} />
-                        </button>
-                        {cardModalOpen && !cardsLoading && !cardsError && (
-                            <div className="absolute top-full left-0 bg-green-100 rounded-xl shadow-lg py-1 mt-2 flex flex-col z-20">
-                                {cards.map((cardItem) => (
-                                    <div key={cardItem.id} className="px-4 py-2 rounded cursor-pointer" onClick={() => {setSelectedCard(cardItem.id); setCardModalOpen(false)}}>
-                                        {cardItem.name}{cardItem.last_four ? ` •••• ${cardItem.last_four}` : ''}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {cardsError && <div className="text-xs text-rose-300 mt-1 w-full">{cardsError}</div>}
-                    </div>
-
-                    {/* Date */}
-                    <div className="flex flex-col items-center justify-center w-full col-span-4">
-                        <h1 className="text-lg self-start w-full font-semibold text-green-200">Date</h1>
-                        <input type="date" className="bg-green-100 rounded-xl px-4 py-2 w-full text-right shadow-sm" value={date} onChange={(e) => setDate(e.target.value)} />
-                    </div>
-
-                    {/* Submit */}
-                    <button type="submit" className="bg-[#4aba68] text-green-100 font-semibold px-4 rounded-xl shadow-md h-10 font-berky text-3xl flex items-center justify-center -rotate-3 mt-4 col-span-4 self-end" disabled={loading}>
-                        {loading? <img src={FrogHead} alt="Loading..." className="w-6 h-6 animate-spin" /> : "Submit"} 
-                    </button>
-                </div>
-                
-                {statusMessage.message && (
-                    <div className={`text-xs font-semibold mt-4 rounded-xl ${
-                    statusMessage.type === 'success' ? 'text-green-300' : ' text-rose-500'
-                    }`}>
-                    {statusMessage.message}
-                    </div>
-                )}
-
-            </form>
-
-
         </div>
-    )
+    );
 }

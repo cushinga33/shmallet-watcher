@@ -25,6 +25,11 @@ app.use('/api/categories', categoryRoutes);
 const cardRoutes = require('./routes/cards');
 app.use('/api/cards', cardRoutes);
 
+const fileRoutes = require('./routes/files');
+app.use('/api/files', fileRoutes);
+
+const profileRoutes = require('./routes/profile');
+app.use('/api/profile', profileRoutes);
 
 app.get('/', (req, res) => {
     res.json({message: 'Shmallet Watcher is aware'})

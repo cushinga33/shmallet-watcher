@@ -1,20 +1,64 @@
 import React, { useState } from "react";
 import FrogHead from "../assets/FrogHead.svg";
-import { createCategory } from "../services/categoryService";
+import { archiveCategory, deleteCategory, unarchiveCategory, updateCategory } from "../services/categoryService";
 import { FaChevronDown, FaKey } from "react-icons/fa6";
-import { buildCategoryIcons } from "../assets/categoryIcons";
+import { buildCategoryIcons, categoryIconDefs } from "../assets/categoryIcons";
 import { userColorChoices } from "../assets/userColorChoices";
+import { AiOutlineDelete } from "react-icons/ai";
+
+const types = ["Expense", "Income"];
+const timeframes = ["Monthly", "Bi-Weekly", "Weekly", "Daily"];
+
+function resolveOptionIndex(value, options, fallback = 0) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < options.length) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const lowerValue = value.toLowerCase();
+    const index = options.findIndex((option) => option.toLowerCase() === lowerValue);
+    if (index !== -1) {
+      return index;
+    }
+  }
+
+  return fallback;
+}
+
+function resolveColorIndex(value, fallback = 6) {
+  const parsedValue = Number.parseInt(value, 10);
+  if (Number.isInteger(parsedValue) && parsedValue >= 0 && parsedValue < userColorChoices.length) {
+    return parsedValue;
+  }
+
+  return fallback;
+}
+
+function resolveIconIndex(value, fallback = 0) {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < categoryIconDefs.length) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const index = categoryIconDefs.findIndex((icon) => icon.name === value);
+    if (index !== -1) {
+      return index;
+    }
+  }
+
+  return fallback;
+}
 
 
 
-export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
-    const [newCategory, setNewCategory] = useState("");
-    const [selectedType, setSelectedType] = useState(0);
+export function EditCategoryModal({ isClosing, onClose, onCategoryUpdated, onCategoryDeleted, selectedCategory }) {
+    const [newCategory, setNewCategory] = useState(selectedCategory ? selectedCategory.name : "");
+    const [selectedType, setSelectedType] = useState(resolveOptionIndex(selectedCategory?.type, types, 0));
     const [typeModalOpen, setTypeModalOpen] = useState(false);
-    const [categoryColor, setCategoryColor] = useState(6);
-    const [categoryBudget, setCategoryBudget] = useState("");
-    const [categoryIcon, setCategoryIcon] = useState(0);
-    const [categoryTimeframe, setCategoryTimeframe] = useState(0);
+    const [categoryColor, setCategoryColor] = useState(resolveColorIndex(selectedCategory?.color, 6));
+    const [categoryBudget, setCategoryBudget] = useState(selectedCategory ? selectedCategory.budget_limit : "");
+    const [categoryIcon, setCategoryIcon] = useState(resolveIconIndex(selectedCategory?.icon, 0));
+    const [categoryTimeframe, setCategoryTimeframe] = useState(resolveOptionIndex(selectedCategory?.timeframe, timeframes, 0));
 
     const [iconModalOpen, setIconModalOpen] = useState(false);
     const [colorModalOpen, setColorModalOpen] = useState(false);
@@ -23,12 +67,10 @@ export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
-    const types = ["Expense", "Income"];
-    const timeframes = ["Monthly", "Bi-Weekly", "Weekly", "Daily"];
-
     const icons = buildCategoryIcons(userColorChoices[categoryColor], 24);
+    const activeIcon = icons[categoryIcon] ?? icons[0];
 
-    const handleAddCategory = async (event) => {
+    const handleUpdateCategory = async (event) => {
         event.preventDefault();
 
         if (!newCategory.trim()) {
@@ -40,22 +82,72 @@ export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
         setErrorMsg("");
 
         try {
-        const category = await createCategory({
+        const category = await updateCategory({
+          id: selectedCategory?.id,
             name: newCategory.trim(),
             type: types[selectedType],
             color: categoryColor,
-            icon: icons[categoryIcon].name,
+            icon: activeIcon.name,
             budget_limit: categoryBudget ? parseFloat(categoryBudget) : null,
             timeframe: timeframes[categoryTimeframe],
         });
 
-        onCategoryAdded(category);
+        onCategoryUpdated(category);
         } catch (error) {
         setErrorMsg(error.message);
         } finally {
         setLoading(false);
         }
     };
+
+      const handleDeleteCategory = async () => {
+        if (!selectedCategory?.id) {
+          setErrorMsg("Category id is missing.");
+          return;
+        }
+
+        setLoading(true);
+        setErrorMsg("");
+
+        try {
+          await deleteCategory(selectedCategory.id);
+          onCategoryDeleted(selectedCategory.id);
+        } catch (error) {
+          if (error?.code === "CATEGORY_IN_USE" || error?.status === 409) {
+            try {
+              await archiveCategory(selectedCategory.id);
+              onCategoryDeleted(selectedCategory.id);
+              return;
+            } catch (archiveError) {
+              setErrorMsg(archiveError.message);
+              return;
+            }
+          }
+
+          setErrorMsg(error.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleUnarchiveCategory = async () => {
+        if (!selectedCategory?.id) {
+          setErrorMsg("Category id is missing.");
+          return;
+        }
+
+        setLoading(true);
+        setErrorMsg("");
+
+        try {
+          const category = await unarchiveCategory(selectedCategory.id);
+          onCategoryUpdated(category);
+        } catch (error) {
+          setErrorMsg(error.message);
+        } finally {
+          setLoading(false);
+        }
+      };
 
   return (
     <div
@@ -68,7 +160,7 @@ export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
       >
         <div className="w-full flex items-center justify-between gap-2">
           <h1 className="text-3xl font-berky text-green-200 text-left flex items-center gap-2">
-            Add Category
+            Edit Category
           </h1>
           <button
             onClick={onClose}
@@ -78,7 +170,7 @@ export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
           </button>
         </div>
 
-        <form className="w-full grid grid-cols-6 grid-rows-3 gap-2" onSubmit={handleAddCategory}>
+        <form className="w-full grid grid-cols-6 grid-rows-3 gap-2" onSubmit={handleUpdateCategory}>
           <div className="flex flex-col items-center justify-center w-full col-span-4">
             <h1 className="text-lg self-start w-full font-semibold text-green-200">Category Name</h1>
             <input
@@ -161,7 +253,7 @@ export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
                 return !open;
               })}
             >
-              {icons[categoryIcon].icon}
+              {activeIcon.icon}
               
             </button>
             {iconModalOpen && (
@@ -233,11 +325,31 @@ export function AddCategoryModal({ isClosing, onClose, onCategoryAdded }) {
           <button
             type="submit"
             disabled={loading}
-            className="mt-4 w-full bg-[#4aba68] text-green-100 font-berky text-3xl py-2 rounded-xl col-start-2 col-end-6 w-[50%] self-center -rotate-3 shadow-md floatAnimationSmall"
+            className="mt-4 w-full bg-[#4aba68] text-green-100 font-berky text-3xl py-2 rounded-xl col-start-3 col-end-7 row-start-3 row-end-4 w-[50%] self-center -rotate-3 shadow-md floatAnimationSmall"
           >
             {loading ? "Saving..." : "Save"}
             <img src={FrogHead} alt="Frog Head" className="w-8 h-8 inline-block ml-2" />
           </button>
+          {selectedCategory?.is_archived ? (
+            <button
+              type="button"
+              disabled={loading}
+              className="mt-4 w-full bg-emerald-500 text-green-100 text-lg font-bold py-2 rounded-xl col-start-1 col-end-3 row-start-3 row-end-4 w-[50%] self-center shadow-md flex items-center justify-center"
+              onClick={handleUnarchiveCategory}
+            >
+              {loading ? "Restoring..." : "Unarchive"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={loading}
+              className="mt-4 w-full bg-rose-400 text-green-100 text-lg font-bold py-2 rounded-xl col-start-1 col-end-3 row-start-3 row-end-4 w-[50%] self-center shadow-md flex items-center justify-center"
+              onClick={handleDeleteCategory}
+            >
+              {loading ? "Deleting..." : "Delete"}
+              <AiOutlineDelete className="w-6 h-6 inline-block ml-2" />
+            </button>
+          )}
 
           {errorMsg && <p className="text-rose-400 text-sm col-span-6 text-center mt-2">{errorMsg}</p>}
         </form>

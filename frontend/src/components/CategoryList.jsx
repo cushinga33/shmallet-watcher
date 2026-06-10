@@ -1,6 +1,7 @@
 import React from "react";
-
-export function CategoryList({ loading, errorMsg, categories, formattedCategoryType }) {
+import { getCategoryIconByName } from "../assets/categoryIcons";
+import { userColorChoices } from "../assets/userColorChoices";
+export function CategoryList({ loading, errorMsg, categories, formattedCategoryType, onEdit }) {
   if (loading) {
     return <div className="p-4 text-green-100 w-full text-center animate-pulse">Loading categories...</div>;
   }
@@ -13,26 +14,40 @@ export function CategoryList({ loading, errorMsg, categories, formattedCategoryT
     return <div className="p-4 text-green-100 w-full text-center">Add some categories!</div>;
   }
 
+  const getCategoryIcon = (iconName, color) => {
+    return getCategoryIconByName(iconName, color);
+  }
+  const colors = userColorChoices;
   return (
-    <ul className="w-full max-w-3xl flex flex-col">
-      {categories.map((category) => (
-        <li key={category.id} className="p-2">
-          <button className="w-full h-full flex flex-col">
-            <div className="flex justify-between">
-              <div className="flex flex-col items-start">
-                <span className="font-semibold text-green-100 text-lg">{category.name}</span>
-                <div className="text-md text-green-200 flex gap-1 items-center">
-                  Budget Limit: ${category.budget_limit}
+    <div>
+      {/* <div className="flex justify-between items-center pt-1">
+        <h2 className="text-lg font-semibold text-slate-600">Name</h2>
+        <h2 className="text-lg font-semibold text-slate-600">Budget Limit</h2>
+      </div> */}
+      <ul className="w-full max-w-3xl flex flex-col">
+        {categories.map((category) => (
+          <li key={category.id} className="py-1">
+            <button className="w-full h-full flex flex-col" onClick={() => onEdit(category)}>
+              <div className="flex justify-between">
+                <div className="flex items-center justify-start gap-2">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-green-100">
+                    {getCategoryIcon(category.icon, colors[category.color] || "#ffffff")}
+                  </div>
+                  <span className="font-semibold text-green-100 text-lg">{category.name}</span>
+                  {category.is_archived && <span className="text-xs text-green-300">(Archived)</span>}
                 </div>
+                {category.type === "expense" ? 
+                  <div className="text-lg font-bold text-green-200 flex gap-1 items-center">
+                    ${category.budget_limit} {category.timeframe && <span className="text-lg font-normal text-green-200">/ {category.timeframe}</span>}
+                  </div> : 
+                  <div className="text-lg font-bold text-green-200 flex gap-1 items-center">
+                    Income
+                  </div>}
               </div>
-              <div className="flex flex-col items-end">
-                <div className="text-xs text-green-100 text-right">{formattedCategoryType(category.type)}</div>
-              </div>
-            </div>
-            <div className="h-[2px] bg-green-100/30 rounded-full" />
-          </button>
-        </li>
-      ))}
-    </ul>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

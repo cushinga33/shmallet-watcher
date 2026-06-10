@@ -1,55 +1,78 @@
-import { supabase } from "../config/supabaseClient";
+import { apiRequest } from "./apiClient";
+import { getCachedCollection, invalidateCachedCollection } from "./resourceCache";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const ACTIVE_RESOURCE_KEY = "categories";
+const ALL_RESOURCE_KEY = "categories:all";
 
-async function getAccessToken() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error("Session expired. Please log in again.");
-  }
-
-  return session.access_token;
+function getResourceKey(includeArchived) {
+  return includeArchived ? ALL_RESOURCE_KEY : ACTIVE_RESOURCE_KEY;
 }
 
-export async function fetchCategories() {
-  const accessToken = await getAccessToken();
+async function invalidateCategoryCaches() {
+  await Promise.all([
+    invalidateCachedCollection(ACTIVE_RESOURCE_KEY),
+    invalidateCachedCollection(ALL_RESOURCE_KEY),
+  ]);
+}
 
-  const response = await fetch(`${API_BASE_URL}/api/categories`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
+export async function fetchCategories(options) {
+  const includeArchived = Boolean(options?.includeArchived);
+  const { includeArchived: _includeArchived, ...cacheOptions } = options || {};
 
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to fetch categories.");
-  }
-
-  return data;
+  return getCachedCollection(
+    getResourceKey(includeArchived),
+    () => apiRequest(`/api/categories${includeArchived ? "?include_archived=true" : ""}`, { method: "GET" }),
+    cacheOptions,
+  );
 }
 
 export async function createCategory(payload) {
-  const accessToken = await getAccessToken();
-
-  const response = await fetch(`${API_BASE_URL}/api/categories`, {
+  const data = await apiRequest("/api/categories", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
     body: JSON.stringify(payload),
   });
 
-  const data = await response.json();
+  await invalidateCategoryCaches();
+  return data.category;
+}
 
-  if (!response.ok) {
-    throw new Error(data.error || "Failed to save category.");
-  }
+export async function updateCategory(payload) {
+  const data = await apiRequest(`/api/categories/${payload.id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+  await invalidateCategoryCaches();
+
+  return data.category;
+}
+
+export async function deleteCategory(categoryId) {
+  const data = await apiRequest(`/api/categories/${categoryId}`, {
+    method: "DELETE",
+  });
+
+  await invalidateCategoryCaches();
+
+  return data.category;
+}
+
+export async function archiveCategory(categoryId) {
+  const data = await apiRequest(`/api/categories/${categoryId}/archive`, {
+    method: "PUT",
+  });
+
+  await invalidateCategoryCaches();
+
+  return data.category;
+}
+
+export async function unarchiveCategory(categoryId) {
+  const data = await apiRequest(`/api/categories/${categoryId}/unarchive`, {
+    method: "PUT",
+  });
+
+  await invalidateCategoryCaches();
 
   return data.category;
 }

@@ -1,21 +1,47 @@
 import React, { useState } from "react";
 import FrogHead from "../assets/FrogHead.svg";
-import { createCard } from "../services/cardService";
-import { FaChevronDown } from "react-icons/fa6";
+import { archiveCard, deleteCard, unarchiveCard, updateCard } from "../services/cardService";
 import { buildCardIcons, cardIconDefs } from "../assets/cardIcons";
 import { userColorChoices } from "../assets/userColorChoices";
+import { AiOutlineDelete } from "react-icons/ai";
 
 const DEFAULT_CARD_ICON_NAME = "CreditCard";
 
-export function AddCardModal({ isClosing, onClose, onCardAdded }) {
-  const [name, setName] = useState("");
-  const [lastFour, setLastFour] = useState("");
-  const [cardLimit, setCardLimit] = useState("");
-  const [cardColor, setCardColor] = useState(6);
-  const [cardIcon, setCardIcon] = useState(() => {
-    const iconIndex = cardIconDefs.findIndex((icon) => icon.name === DEFAULT_CARD_ICON_NAME);
-    return iconIndex >= 0 ? iconIndex : 0;
-  });
+function resolveColorIndex(value, fallback = 6) {
+  if (typeof value === "string") {
+    const index = userColorChoices.findIndex((color) => color.toLowerCase() === value.toLowerCase());
+    if (index !== -1) {
+      return index;
+    }
+  }
+
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value < userColorChoices.length) {
+    return value;
+  }
+
+  return fallback;
+}
+
+function resolveIconIndex(value) {
+  const fallback = cardIconDefs.findIndex((icon) => icon.name === DEFAULT_CARD_ICON_NAME);
+
+  if (typeof value === "string") {
+    const index = cardIconDefs.findIndex((icon) => icon.name === value);
+    if (index !== -1) {
+      return index;
+    }
+  }
+
+  return fallback >= 0 ? fallback : 0;
+}
+
+export function EditCardModal({ isClosing, onClose, onCardUpdated, onCardDeleted, selectedCard }) {
+  const [name, setName] = useState(selectedCard?.name || "");
+  const [lastFour, setLastFour] = useState(selectedCard?.last_four || "");
+  const [cardLimit, setCardLimit] = useState(selectedCard?.card_limit ?? "");
+  const [cardColor, setCardColor] = useState(resolveColorIndex(selectedCard?.color, 6));
+  const [cardIcon, setCardIcon] = useState(resolveIconIndex(selectedCard?.icon));
+
   const [iconModalOpen, setIconModalOpen] = useState(false);
   const [colorModalOpen, setColorModalOpen] = useState(false);
 
@@ -23,9 +49,9 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
   const [errorMsg, setErrorMsg] = useState("");
 
   const icons = buildCardIcons(userColorChoices[cardColor], 30);
-  const colors = userColorChoices;
+  const activeIcon = icons[cardIcon] ?? icons[0];
 
-  const handleAddCard = async (event) => {
+  const handleUpdateCard = async (event) => {
     event.preventDefault();
 
     if (!name.trim()) {
@@ -37,23 +63,65 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
     setErrorMsg("");
 
     try {
-      const card = await createCard({
+      const card = await updateCard({
+        id: selectedCard?.id,
         name: name.trim(),
         last_four: lastFour.trim(),
         card_limit: cardLimit ? parseFloat(cardLimit) : null,
         color: userColorChoices[cardColor],
-        icon: icons[cardIcon].name,
+        icon: activeIcon.name,
       });
 
-      onCardAdded(card);
-      setName("");
-      setLastFour("");
-      setCardLimit("");
-      setCardColor(0);
-      const iconIndex = cardIconDefs.findIndex((icon) => icon.name === DEFAULT_CARD_ICON_NAME);
-      setCardIcon(iconIndex >= 0 ? iconIndex : 0);
-      setIconModalOpen(false);
-      setColorModalOpen(false);
+      onCardUpdated(card);
+    } catch (error) {
+      setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCard = async () => {
+    if (!selectedCard?.id) {
+      setErrorMsg("Card id is missing.");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg("");
+
+    try {
+      await deleteCard(selectedCard.id);
+      onCardDeleted(selectedCard.id);
+    } catch (error) {
+      if (error?.code === "CARD_IN_USE" || error?.status === 409) {
+        try {
+          await archiveCard(selectedCard.id);
+          onCardDeleted(selectedCard.id);
+          return;
+        } catch (archiveError) {
+          setErrorMsg(archiveError.message);
+          return;
+        }
+      }
+
+      setErrorMsg(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnarchiveCard = async () => {
+    if (!selectedCard?.id) {
+      setErrorMsg("Card id is missing.");
+      return;
+    }
+
+    setLoading(true);
+    setErrorMsg("");
+
+    try {
+      const card = await unarchiveCard(selectedCard.id);
+      onCardUpdated(card);
     } catch (error) {
       setErrorMsg(error.message);
     } finally {
@@ -74,13 +142,12 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
           if (event.target === event.currentTarget) {
             setIconModalOpen(false);
             setColorModalOpen(false);
-
           }
         }}
       >
         <div className="w-full flex items-center justify-between gap-2">
           <h1 className="text-3xl font-berky text-green-200 text-left flex items-center gap-2">
-            Add Card
+            Edit Card
           </h1>
           <button
             onClick={onClose}
@@ -90,7 +157,7 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
           </button>
         </div>
 
-        <form className="w-full grid grid-cols-6 grid-rows-3 gap-2" onSubmit={handleAddCard}>
+        <form className="w-full grid grid-cols-6 grid-rows-3 gap-2" onSubmit={handleUpdateCard}>
           <div className="flex flex-col items-center justify-center w-full col-span-4">
             <h1 className="text-lg self-start w-full font-semibold text-green-200">Card Name</h1>
             <input
@@ -108,11 +175,11 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
               setIconModalOpen(false);
               return !open;
             })}>
-              <div className="rounded w-full h-full items-center justify-center flex" style={{ backgroundColor: colors[cardColor] }} />              
+              <div className="rounded w-full h-full items-center justify-center flex" style={{ backgroundColor: userColorChoices[cardColor] }} />
             </button>
             {colorModalOpen && (
               <div className="absolute top-full right-0 bg-green-100 p-2 rounded-xl shadow-lg mt-2 grid grid-cols-4 gap-1 z-20 w-55">
-                {colors.map((color, index) => (
+                {userColorChoices.map((color, index) => (
                   <div
                     key={color}
                     className="p-2 rounded cursor-pointer items-center justify-center flex aspect-square"
@@ -137,7 +204,7 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
                 return !open;
               })}
             >
-              {icons[cardIcon].icon}
+              {activeIcon.icon}
             </button>
             {iconModalOpen && (
               <div className="absolute top-full right-0 bg-green-100 rounded-xl shadow-lg mt-2 grid grid-cols-4 gap-1 z-20 w-55">
@@ -185,11 +252,32 @@ export function AddCardModal({ isClosing, onClose, onCardAdded }) {
           <button
             type="submit"
             disabled={loading}
-            className="mt-4 w-full bg-[#4aba68] text-green-100 font-berky text-3xl py-2 rounded-xl col-start-2 col-end-6 w-[50%] self-center -rotate-3 shadow-md floatAnimationSmall"
+            className="mt-4 w-full bg-[#4aba68] text-green-100 font-berky text-3xl py-2 rounded-xl col-start-3 col-end-7 row-start-3 row-end-4 w-[50%] self-center -rotate-3 shadow-md floatAnimationSmall"
           >
             {loading ? "Saving..." : "Save"}
             <img src={FrogHead} alt="Frog Head" className="w-8 h-8 inline-block ml-2" />
           </button>
+
+          {selectedCard?.is_archived ? (
+            <button
+              type="button"
+              disabled={loading}
+              className="mt-4 w-full bg-emerald-500 text-green-100 text-lg font-bold py-2 rounded-xl col-start-1 col-end-3 row-start-3 row-end-4 w-[50%] self-center shadow-md flex items-center justify-center"
+              onClick={handleUnarchiveCard}
+            >
+              {loading ? "Restoring..." : "Unarchive"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={loading}
+              className="mt-4 w-full bg-rose-400 text-green-100 text-lg font-bold py-2 rounded-xl col-start-1 col-end-3 row-start-3 row-end-4 w-[50%] self-center shadow-md flex items-center justify-center"
+              onClick={handleDeleteCard}
+            >
+              {loading ? "Deleting..." : "Delete"}
+              <AiOutlineDelete className="w-6 h-6 inline-block ml-2" />
+            </button>
+          )}
 
           {errorMsg && <p className="text-rose-400 text-sm col-span-6 text-center mt-2">{errorMsg}</p>}
         </form>
