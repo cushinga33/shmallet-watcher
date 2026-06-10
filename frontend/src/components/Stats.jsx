@@ -180,10 +180,10 @@ function adjustBudgetForView(budget, timeframe, view) {
 function buildTimelineSnapshot({ range, categories, transactions, view, weeklyProfileIncome }) {
     const categoryById = new Map(categories.map((category) => [category.id, category]));
     const expenseCategories = categories.filter((category) => category.type === "expense");
-    const shouldEstimateRecurring = view === "week";
+    const shouldIncludeRecurringWithoutDateFilter = view === "week";
     const actualInRangeTransactions = transactions.filter((transaction) => isDateInRange(transaction.date, range));
     const inRangeTransactions = transactions.filter((transaction) =>
-        shouldEstimateRecurring && transaction.timeframe && transaction.timeframe !== "Once"
+        shouldIncludeRecurringWithoutDateFilter && transaction.timeframe && transaction.timeframe !== "Once"
             ? true
             : isDateInRange(transaction.date, range),
     );
@@ -198,7 +198,7 @@ function buildTimelineSnapshot({ range, categories, transactions, view, weeklyPr
         const fallbackCategory = categoryById.get(transaction.category_id);
         const categoryType = (transaction.category?.type || fallbackCategory?.type || "expense").toLowerCase();
         const amount = toNumber(transaction.amount);
-        const adjustedAmount = shouldEstimateRecurring
+        const adjustedAmount = transaction.timeframe && transaction.timeframe !== "Once"
             ? adjustAmountForView(amount, transaction.timeframe, view)
             : amount;
 
@@ -276,10 +276,10 @@ function buildTimelineSnapshot({ range, categories, transactions, view, weeklyPr
             .filter((transaction) => transaction.category_id === category.id)
             .map((transaction) => ({
                 ...transaction,
-                adjustedAmount: shouldEstimateRecurring
+                adjustedAmount: transaction.timeframe && transaction.timeframe !== "Once"
                     ? adjustAmountForView(toNumber(transaction.amount), transaction.timeframe, view)
                     : toNumber(transaction.amount),
-                isEstimated: shouldEstimateRecurring && transaction.timeframe !== "Once",
+                isEstimated: transaction.timeframe && transaction.timeframe !== "Once",
             }));
 
         return {
