@@ -50,9 +50,8 @@ export function TimelineView({ title, timelineData, loading, error, formatCurren
                         ) : (
                             <ul className="flex flex-col gap-1 h-full overflow-y-auto pb-8">
                                 {timelineData.categoryRows.map((row) => (
-                                    
-                                    <div>
-                                        <li key={row.id} className="grid grid-cols-12 items-center bg-green-100/90 rounded-xl px-2 py-2 shadow-xs cursor-pointer" onClick={() => setExpandedRowId((current) => current === row.id ? null : row.id)} style={expandedRowId !== row.id && expandedRowId !== null ? { filter: "brightness(0.85)" } : {}}>
+                                    <div key={row.id}>
+                                        <li className="grid grid-cols-12 items-center bg-green-100/90 rounded-xl px-2 py-2 shadow-xs cursor-pointer" onClick={() => setExpandedRowId((current) => current === row.id ? null : row.id)} style={expandedRowId !== row.id && expandedRowId !== null ? { filter: "brightness(0.85)" } : {}}>
                                             <span className="col-span-5 font-semibold text-slate-700 truncate flex items-center gap-1.5" title={row.name}>
                                                 <span className="w-5 h-5 shrink-0 flex items-center justify-center">{getCategoryIconByName(row.icon, userColorChoices[row.color])}</span>
                                                 {row.name}
@@ -64,8 +63,8 @@ export function TimelineView({ title, timelineData, loading, error, formatCurren
                                         </li>
                                         {expandedRowId === row.id && (
                                             <ul className="mt-1 mb-2 ml-4 flex flex-col gap-1">
-                                                {row.transactions.map((transaction) => (
-                                                    <li key={transaction.id} className="grid grid-cols-12 items-center bg-green-100/90 rounded-xl px-2 py-2 shadow-xs text-sm">
+                                                {row.transactions.map((transaction, index) => (
+                                                    <li key={transaction.id ?? `${row.id}-${transaction.date}-${transaction.description}-${index}`} className="grid grid-cols-12 items-center bg-green-100/90 rounded-xl px-2 py-2 shadow-xs text-sm">
                                                         <span className="col-span-8 font-semibold text-slate-700 truncate" title={transaction.description}>{transaction.description}{transaction.timeframe !== 'Once' && ` (Recurring ${transaction.timeframe})`}</span>
                                                         <span className="col-span-4 text-right font-semibold text-slate-700">{transaction.isEstimated ? `Est. ${formatCurrency(transaction.adjustedAmount)}` : formatCurrency(transaction.adjustedAmount ?? transaction.amount)}</span>
                                                         {/* <span className="col-span-4 text-right font-semibold text-slate-600">

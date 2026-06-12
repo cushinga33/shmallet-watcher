@@ -83,110 +83,132 @@ function isDateInRange(dateValue, range) {
     return current >= range.start && current <= range.end;
 }
 
-function adjustAmountForView(amount, timeframe, view) {
-    switch (view) {
-        case "week":
-            switch (timeframe) {
-                case "Daily":
-                    return amount * 7;
-                case "Monthly":
-                    return amount / 4.345;
-                case "Bi-Weekly":
-                    return amount / 2;
-                case "Weekly":
-                case "Once":
-                default:
-                    return amount;
-            }
-        case "month":
-            switch (timeframe) {
-                case "Daily":
-                    return amount * 30;
-                case "Weekly":
-                    return amount * 4.345;
-                case "Bi-Weekly":
-                    return amount * 2;
-                case "Monthly":
-                case "Once":
-                default:
-                    return amount;
-            }
-        case "year":
-            switch (timeframe) {
-                case "Daily":
-                    return amount * 365;
-                case "Weekly":
-                    return amount * 52;
-                case "Bi-Weekly":
-                    return amount * 26;
-                case "Monthly":
-                    return amount * 12;
-                case "Once":
-                default:
-                    return amount;
-            }
+function getEffectiveRangeEnd(range, referenceDate = new Date()) {
+    const today = new Date(referenceDate);
+    today.setHours(23, 59, 59, 999);
+    return today < range.end ? today : range.end;
+}
+
+function getNextOccurrenceDate(dateValue, timeframe) {
+    const nextDate = new Date(dateValue);
+
+    switch (timeframe) {
+        case "Daily":
+            nextDate.setDate(nextDate.getDate() + 1);
+            break;
+        case "Weekly":
+            nextDate.setDate(nextDate.getDate() + 7);
+            break;
+        case "Bi-Weekly":
+            nextDate.setDate(nextDate.getDate() + 14);
+            break;
+        case "Monthly":
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            break;
+        default:
+            return null;
+    }
+
+    return nextDate;
+}
+
+function adjustAmountForWeekProjection(amount, timeframe) {
+    switch (timeframe) {
+        case "Daily":
+            return amount * 7;
+        case "Bi-Weekly":
+            return amount / 2;
+        case "Monthly":
+            return amount / 4.345;
+        case "Weekly":
+        case "Once":
         default:
             return amount;
     }
 }
 
-function adjustBudgetForView(budget, timeframe, view) {
-    switch (view) {
-        case "week":
-            switch (timeframe) {
-                case "Daily":
-                    return budget * 7;
-                case "Monthly":
-                    return budget / 4.345;
-                case "Bi-Weekly":
-                    return budget / 2;
-                case "Weekly":
-                case "Once":
-                default:
-                    return budget;
-            }
-        case "month":
-            switch (timeframe) {
-                case "Daily":
-                    return budget * 30;
-                case "Weekly":
-                    return budget * 4.345;
-                case "Bi-Weekly":
-                    return budget * 2;
-                case "Monthly":
-                case "Once":
-                default:
-                    return budget;
-            }
-        case "year":
-            switch (timeframe) {
-                case "Daily":
-                    return budget * 365;
-                case "Weekly":
-                    return budget * 52;
-                case "Bi-Weekly":
-                    return budget * 26;
-                case "Monthly":
-                    return budget * 12;
-                case "Once":
-                default:
-                    return budget;
-            }
-        default:
-            return budget;
+function countRecurringOccurrences(startDateValue, timeframe, range) {
+    if (!timeframe || timeframe === "Once") {
+        return isDateInRange(startDateValue, {
+            start: range.start,
+            end: getEffectiveRangeEnd(range),
+        }) ? 1 : 0;
     }
+
+    const firstOccurrence = getLocalDayBounds(parseTransactionDate(startDateValue));
+    const rangeStart = getLocalDayBounds(range.start);
+    const rangeEnd = getEffectiveRangeEnd(range);
+
+    if (Number.isNaN(firstOccurrence.getTime()) || firstOccurrence > rangeEnd) {
+        return 0;
+    }
+
+    let occurrences = 0;
+    let currentOccurrence = firstOccurrence;
+
+    while (currentOccurrence <= rangeEnd) {
+        if (currentOccurrence >= rangeStart) {
+            occurrences += 1;
+        }
+
+        const nextOccurrence = getNextOccurrenceDate(currentOccurrence, timeframe);
+        if (!nextOccurrence || nextOccurrence <= currentOccurrence) {
+            break;
+        }
+
+        currentOccurrence = nextOccurrence;
+    }
+
+    return occurrences;
+}
+
+function adjustAmountForRange(amount, timeframe, range, startDateValue) {
+    if (!timeframe || timeframe === "Once") {
+        return amount;
+    }
+
+    return amount * countRecurringOccurrences(startDateValue, timeframe, range);
+}
+
+function adjustBudgetForRange(budget, timeframe, range) {
+    if (!timeframe || timeframe === "Once") {
+        return budget;
+    }
+
+    return budget * countRecurringOccurrences(range.start, timeframe, range);
+}
+
+function getAdjustedTransactionAmount(transaction, range, view) {
+    const amount = toNumber(transaction.amount);
+
+    if (!transaction.timeframe || transaction.timeframe === "Once") {
+        return isDateInRange(transaction.date, range) ? amount : 0;
+    }
+
+    if (view === "week") {
+        return adjustAmountForWeekProjection(amount, transaction.timeframe);
+    }
+
+    return adjustAmountForRange(amount, transaction.timeframe, range, transaction.date);
+}
+
+function getAdjustedBudgetAmount(budget, timeframe, range, view) {
+    if (!timeframe || timeframe === "Once") {
+        return budget;
+    }
+
+    if (view === "week") {
+        return adjustAmountForWeekProjection(budget, timeframe);
+    }
+
+    return adjustBudgetForRange(budget, timeframe, range);
 }
 
 function buildTimelineSnapshot({ range, categories, transactions, view, weeklyProfileIncome }) {
     const categoryById = new Map(categories.map((category) => [category.id, category]));
     const expenseCategories = categories.filter((category) => category.type === "expense");
-    const shouldIncludeRecurringWithoutDateFilter = view === "week";
     const actualInRangeTransactions = transactions.filter((transaction) => isDateInRange(transaction.date, range));
-    const inRangeTransactions = transactions.filter((transaction) =>
-        shouldIncludeRecurringWithoutDateFilter && transaction.timeframe && transaction.timeframe !== "Once"
-            ? true
-            : isDateInRange(transaction.date, range),
-    );
+    const inRangeTransactions = transactions.filter((transaction) => getAdjustedTransactionAmount(transaction, range, view) > 0);
 
     let totalIncome = 0;
     let totalExpense = 0;
@@ -197,10 +219,7 @@ function buildTimelineSnapshot({ range, categories, transactions, view, weeklyPr
     inRangeTransactions.forEach((transaction) => {
         const fallbackCategory = categoryById.get(transaction.category_id);
         const categoryType = (transaction.category?.type || fallbackCategory?.type || "expense").toLowerCase();
-        const amount = toNumber(transaction.amount);
-        const adjustedAmount = transaction.timeframe && transaction.timeframe !== "Once"
-            ? adjustAmountForView(amount, transaction.timeframe, view)
-            : amount;
+        const adjustedAmount = getAdjustedTransactionAmount(transaction, range, view);
 
         if (categoryType === "income") {
             totalIncome += adjustedAmount;
@@ -271,14 +290,12 @@ function buildTimelineSnapshot({ range, categories, transactions, view, weeklyPr
         const spent = spentByCategory.get(category.id) || 0;
         const hasBudget = category.budget_limit !== null && category.budget_limit !== undefined && category.budget_limit !== "";
         const budget = hasBudget ? toNumber(category.budget_limit) : null;
-        const available = hasBudget ? adjustBudgetForView(budget, category.timeframe, view) - spent : null;
+        const available = hasBudget ? getAdjustedBudgetAmount(budget, category.timeframe, range, view) - spent : null;
         const categoryTransactions = inRangeTransactions
             .filter((transaction) => transaction.category_id === category.id)
             .map((transaction) => ({
                 ...transaction,
-                adjustedAmount: transaction.timeframe && transaction.timeframe !== "Once"
-                    ? adjustAmountForView(toNumber(transaction.amount), transaction.timeframe, view)
-                    : toNumber(transaction.amount),
+                adjustedAmount: getAdjustedTransactionAmount(transaction, range, view),
                 isEstimated: transaction.timeframe && transaction.timeframe !== "Once",
             }));
 
