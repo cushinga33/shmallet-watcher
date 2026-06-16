@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../config/supabaseClient";
 import { Background } from "./Background";
+import { FrogState } from '../components/FrogState';
+import Lilypad from '../assets/Lilypad.svg';
+
 
 export function Auth() {
     const [isSignUp, setIsSignUp] = useState(false);
@@ -55,14 +58,15 @@ export function Auth() {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen px-4 bg-slate-50">
+        <div className="flex flex-col items-center min-h-screen p-2 bg-slate-50">
             <Background />
-            <div className="w-full max-w-md p-8 bg-white rounded-3xl shadow-xl border border-slate-100 z-10">
-                <h2 className="text-3xl font-black text-center text-slate-800 mb-2">
+
+            <div className="w-full p-8 bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm z-10 backdrop-brightness-90">
+                <h2 className="text-4xl font-black text-center text-green-200 font-berky mb-2">
                     Frog Wallet
                 </h2>
-                <p className="text-sm text-center text-slate-500 mb-6">
-                    {isSignUp ? 'Create an account to meet your companion' : 'Sign in to check on your budget frog'}
+                <p className="text-sm text-center text-green-200 mb-6">
+                    {isSignUp ? 'Create account to meet your frog' : 'Sign in to check on your frog'}
                 </p>
 
                 {errorMsg && <div className="p-3 mb-4 text-xs font-bold bg-rose-50 text-rose-600 rounded-xl">{errorMsg}</div>}
@@ -70,7 +74,7 @@ export function Auth() {
 
                 <form onSubmit={handleAuth} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Email Address</label>
+                        <label className="block text-xs font-bold uppercase text-green-200 mb-1">Email Address</label>
                         <input 
                             type="email" 
                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -81,7 +85,7 @@ export function Auth() {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Password</label>
+                        <label className="block text-xs font-bold uppercase text-green-200 mb-1">Password</label>
                         <input 
                             type="password" 
                             className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -94,7 +98,7 @@ export function Auth() {
                     
                     {isSignUp && (
                         <div>
-                            <label className="block text-xs font-bold uppercase text-slate-400 mb-1">Confirm Password</label>
+                            <label className="block text-xs font-bold uppercase text-green-200 mb-1">Confirm Password</label>
                             <input 
                                 type="password" 
                                 className={`w-full px-4 py-3 bg-slate-50 border rounded-xl text-sm focus:outline-none transition-colors ${
@@ -125,11 +129,15 @@ export function Auth() {
                             setIsSignUp(!isSignUp);
                             setPasswordConfirm('');
                         }} 
-                        className="text-xs font-bold text-emerald-600 hover:underline"
+                        className="text-xs font-bold text-green-200 hover:underline"
                     >
                         {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
                     </button>
                 </div>
+            </div>
+            <div className="flex absolute bottom-0 h-[50vh] w-full floatAnimation pointer-events-none">
+                <img src={Lilypad} alt="Lilypad" className="absolute -bottom-25 w-full h-full object-contain" />
+                <FrogState weightState="super_fat" happiness={80} />
             </div>
         </div>
     );
