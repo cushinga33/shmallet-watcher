@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="c" data-name="Head" xmlns="http://www.w3.org/2000/svg" width="450.54" height="323.66" viewBox="0 0 450.54 323.66">
+  <path d="M411.93,103.48c2.8-7.52,4.33-15.66,4.33-24.16,0-38.29-31.04-69.33-69.33-69.33-23.68,0-44.58,11.88-57.08,30-20.19-2.28-41.92-2.32-64.58-2.32-22.66,0-44.39.04-64.58,2.32-12.51-18.12-33.4-30-57.08-30-38.29,0-69.33,31.04-69.33,69.33,0,8.5,1.54,16.63,4.33,24.16-16.88,16.13-28.61,34.39-28.61,56.08,0,126.27,107.91,153.35,215.27,154.1,107.36-.75,215.27-27.83,215.27-154.1,0-21.69-11.73-39.95-28.61-56.08Z" style="fill: #63e57f; stroke: #32703d; stroke-miterlimit: 10; stroke-width: 20px;"/>
+  <g id="d" data-name="Head">
+    <g id="e" data-name="Head and Eyes">
+      <g>
+        <path id="f" data-name="Head" d="M351.22,59.41c-33.85-21.63-77.82-21.74-125.95-21.74-48.12,0-92.1.11-125.95,21.74C57.81,85.94,10,115.77,10,159.56c0,126.27,107.91,153.35,215.27,154.1,107.36-.75,215.27-27.83,215.27-154.1,0-43.79-47.81-73.62-89.32-100.15Z" style="fill: #63e57f;"/>
+        <g id="g" data-name="Eyes">
+          <g id="h" data-name="Left Eye">
+            <circle cx="103.61" cy="79.33" r="69.33" style="fill: #63e57f;"/>
+            <circle cx="103.61" cy="79.33" r="54.8" style="fill: #d4ffcc;"/>
+            <circle cx="103.61" cy="79.33" r="42.04"/>
+            <circle cx="92.97" cy="63.54" r="5.48" style="fill: #fff;"/>
+          </g>
+          <g id="i" data-name="Right Eye">
+            <circle cx="346.94" cy="79.33" r="69.33" style="fill: #63e57f;"/>
+            <circle cx="346.94" cy="79.33" r="54.8" style="fill: #d4ffcc;"/>
+            <circle cx="346.94" cy="79.33" r="42.04"/>
+            <circle cx="334.55" cy="65.3" r="5.48" style="fill: #fff;"/>
+          </g>
+        </g>
+      </g>
+    </g>
+    <g id="j" data-name="Mouth">
+      <path d="M225.27,190.84s62.7,46.88,126.34-21.75" style="fill: none; stroke: #32703d; stroke-linecap: round; stroke-miterlimit: 10; stroke-width: 10px;"/>
+      <path d="M225.27,190.84s-62.7,46.88-126.34-21.75" style="fill: none; stroke: #32703d; stroke-linecap: round; stroke-miterlimit: 10; stroke-width: 10px;"/>
+    </g>
+    <g id="k" data-name="Blush">
+      <ellipse cx="51.7" cy="165.59" rx="24.51" ry="17.43" style="fill: #ffe9e9;"/>
+      <ellipse cx="401.74" cy="165.59" rx="24.51" ry="17.43" style="fill: #ffe9e9;"/>
+    </g>
+  </g>
+</svg>

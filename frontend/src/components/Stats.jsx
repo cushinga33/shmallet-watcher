@@ -1,0 +1,654 @@
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { fetchCategories as fetchCategoriesApi } from "../services/categoryService";
+import { fetchCards as fetchCardsApi } from "../services/cardService";
+import {
+    createTransaction,
+    fetchTransactions as fetchTransactionsApi,
+} from "../services/transactionService";
+import { fetchProfileIncome as fetchProfileIncomeApi } from "../services/profileService";
+import { TimelineView } from "./stats/TimelineView";
+import { NewTransactionView } from "./stats/NewTransactionView";
+
+const getTodayDate = () => new Date().toISOString().split("T")[0];
+const STATUS_MESSAGE_TIMEOUT_MS = 3000;
+const SWIPE_THRESHOLD_PX = 40;
+
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+});
+
+function formatCurrency(amount) {
+    return currencyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+function toNumber(value) {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getLocalDayBounds(dateValue) {
+    const date = new Date(dateValue);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function getCurrentWeekRange(referenceDate = new Date()) {
+    const start = getLocalDayBounds(referenceDate);
+    start.setDate(start.getDate() - start.getDay());
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function getCurrentMonthRange(referenceDate = new Date()) {
+    const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function getCurrentYearRange(referenceDate = new Date()) {
+    const start = new Date(referenceDate.getFullYear(), 0, 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(referenceDate.getFullYear(), 11, 31);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+}
+
+function parseTransactionDate(dateValue) {
+    if (typeof dateValue === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        const [year, month, day] = dateValue.split("-").map(Number);
+        return new Date(year, month - 1, day);
+    }
+
+    return new Date(dateValue);
+}
+
+function isDateInRange(dateValue, range) {
+    const current = parseTransactionDate(dateValue);
+    if (Number.isNaN(current.getTime())) {
+        return false;
+    }
+
+    return current >= range.start && current <= range.end;
+}
+
+function getEffectiveRangeEnd(range, referenceDate = new Date()) {
+    const today = new Date(referenceDate);
+    today.setHours(23, 59, 59, 999);
+    return today < range.end ? today : range.end;
+}
+
+function getNextOccurrenceDate(dateValue, timeframe) {
+    const nextDate = new Date(dateValue);
+
+    switch (timeframe) {
+        case "Daily":
+            nextDate.setDate(nextDate.getDate() + 1);
+            break;
+        case "Weekly":
+            nextDate.setDate(nextDate.getDate() + 7);
+            break;
+        case "Bi-Weekly":
+            nextDate.setDate(nextDate.getDate() + 14);
+            break;
+        case "Monthly":
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            break;
+        default:
+            return null;
+    }
+
+    return nextDate;
+}
+
+function adjustAmountForWeekProjection(amount, timeframe) {
+    switch (timeframe) {
+        case "Daily":
+            return amount * 7;
+        case "Bi-Weekly":
+            return amount / 2;
+        case "Monthly":
+            return amount / 4.345;
+        case "Weekly":
+        case "Once":
+        default:
+            return amount;
+    }
+}
+
+function countRecurringOccurrences(startDateValue, timeframe, range) {
+    if (!timeframe || timeframe === "Once") {
+        return isDateInRange(startDateValue, {
+            start: range.start,
+            end: getEffectiveRangeEnd(range),
+        }) ? 1 : 0;
+    }
+
+    const firstOccurrence = getLocalDayBounds(parseTransactionDate(startDateValue));
+    const rangeStart = getLocalDayBounds(range.start);
+    const rangeEnd = getEffectiveRangeEnd(range);
+
+    if (Number.isNaN(firstOccurrence.getTime()) || firstOccurrence > rangeEnd) {
+        return 0;
+    }
+
+    let occurrences = 0;
+    let currentOccurrence = firstOccurrence;
+
+    while (currentOccurrence <= rangeEnd) {
+        if (currentOccurrence >= rangeStart) {
+            occurrences += 1;
+        }
+
+        const nextOccurrence = getNextOccurrenceDate(currentOccurrence, timeframe);
+        if (!nextOccurrence || nextOccurrence <= currentOccurrence) {
+            break;
+        }
+
+        currentOccurrence = nextOccurrence;
+    }
+
+    return occurrences;
+}
+
+function adjustAmountForRange(amount, timeframe, range, startDateValue) {
+    if (!timeframe || timeframe === "Once") {
+        return amount;
+    }
+
+    return amount * countRecurringOccurrences(startDateValue, timeframe, range);
+}
+
+function adjustBudgetForRange(budget, timeframe, range) {
+    if (!timeframe || timeframe === "Once") {
+        return budget;
+    }
+
+    return budget * countRecurringOccurrences(range.start, timeframe, range);
+}
+
+function getAdjustedTransactionAmount(transaction, range, view) {
+    const amount = toNumber(transaction.amount);
+
+    if (!transaction.timeframe || transaction.timeframe === "Once") {
+        return isDateInRange(transaction.date, range) ? amount : 0;
+    }
+
+    if (view === "week") {
+        return adjustAmountForWeekProjection(amount, transaction.timeframe);
+    }
+
+    return adjustAmountForRange(amount, transaction.timeframe, range, transaction.date);
+}
+
+function getAdjustedBudgetAmount(budget, timeframe, range, view) {
+    if (!timeframe || timeframe === "Once") {
+        return budget;
+    }
+
+    if (view === "week") {
+        return adjustAmountForWeekProjection(budget, timeframe);
+    }
+
+    return adjustBudgetForRange(budget, timeframe, range);
+}
+
+function buildTimelineSnapshot({ range, categories, transactions, view, weeklyProfileIncome }) {
+    const categoryById = new Map(categories.map((category) => [category.id, category]));
+    const expenseCategories = categories.filter((category) => category.type === "expense");
+    const actualInRangeTransactions = transactions.filter((transaction) => isDateInRange(transaction.date, range));
+    const inRangeTransactions = transactions.filter((transaction) => getAdjustedTransactionAmount(transaction, range, view) > 0);
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+
+    const spentByCategory = new Map();
+    const incomeByCategory = new Map();
+
+    inRangeTransactions.forEach((transaction) => {
+        const fallbackCategory = categoryById.get(transaction.category_id);
+        const categoryType = (transaction.category?.type || fallbackCategory?.type || "expense").toLowerCase();
+        const adjustedAmount = getAdjustedTransactionAmount(transaction, range, view);
+
+        if (categoryType === "income") {
+            totalIncome += adjustedAmount;
+            return;
+        }
+        totalExpense += adjustedAmount;
+        if (typeof transaction.category_id === "number") {
+            const runningSpent = spentByCategory.get(transaction.category_id) || 0;
+            spentByCategory.set(transaction.category_id, runningSpent + adjustedAmount);
+        }
+    });
+
+    actualInRangeTransactions.forEach((transaction) => {
+        const fallbackCategory = categoryById.get(transaction.category_id);
+        const categoryType = (transaction.category?.type || fallbackCategory?.type || "expense").toLowerCase();
+
+        if (categoryType !== "income") {
+            return;
+        }
+
+        if (typeof transaction.category_id === "number") {
+            const runningIncome = incomeByCategory.get(transaction.category_id) || 0;
+            incomeByCategory.set(transaction.category_id, runningIncome + toNumber(transaction.amount));
+        }
+    });
+
+    const totalBudget = expenseCategories.reduce((total, category) => {
+        const value = category.budget_limit;
+        if (value === null || value === undefined || value === "") {
+            return total;
+        }
+
+        return total + toNumber(value);
+    }, 0);
+
+    const actualIncomeInRange = Array.from(incomeByCategory.values()).reduce((sum, value) => sum + value, 0);
+    const estimatedIncomeForWeek = Number.isFinite(weeklyProfileIncome)
+        ? weeklyProfileIncome
+        : totalIncome;
+    const incomeIsEstimated = view === "week" && actualIncomeInRange <= 0;
+    const incomeForView = incomeIsEstimated ? estimatedIncomeForWeek : actualIncomeInRange;
+    const netAmount = incomeForView - totalExpense;
+
+    const categoryRows = categories.map((category) => {
+        if (category.type === "income") {
+            const actualIncome = incomeByCategory.get(category.id) || 0;
+            const categoryTransactions = actualInRangeTransactions
+                .filter((transaction) => transaction.category_id === category.id)
+                .map((transaction) => ({
+                    ...transaction,
+                    adjustedAmount: toNumber(transaction.amount),
+                    isEstimated: false,
+                }));
+
+            return {
+                id: category.id,
+                name: category.name,
+                type: category.type,
+                icon: category.icon,
+                color: category.color,
+                spent: 0,
+                available: actualIncome,
+                hasBudget: false,
+                transactions: categoryTransactions,
+            };
+        }
+
+        const spent = spentByCategory.get(category.id) || 0;
+        const hasBudget = category.budget_limit !== null && category.budget_limit !== undefined && category.budget_limit !== "";
+        const budget = hasBudget ? toNumber(category.budget_limit) : null;
+        const available = hasBudget ? getAdjustedBudgetAmount(budget, category.timeframe, range, view) - spent : null;
+        const categoryTransactions = inRangeTransactions
+            .filter((transaction) => transaction.category_id === category.id)
+            .map((transaction) => ({
+                ...transaction,
+                adjustedAmount: getAdjustedTransactionAmount(transaction, range, view),
+                isEstimated: transaction.timeframe && transaction.timeframe !== "Once",
+            }));
+
+        return {
+            id: category.id,
+            name: category.name,
+            type: category.type,
+            icon: category.icon,
+            color: category.color,
+            spent,
+            available,
+            hasBudget,
+            transactions: categoryTransactions,
+        };
+    });
+
+    return {
+        totals: {
+            spent: totalExpense,
+            income: incomeForView,
+            net: netAmount,
+            incomeIsEstimated,
+        },
+        categoryRows,
+    };
+}
+
+export function Stats() {
+    const timeframes = ["Once", "Monthly", "Bi-Weekly", "Weekly", "Daily"];
+
+    const [description, setDescription] = useState("");
+    const [amount, setAmount] = useState("");
+    const [categories, setCategories] = useState([]);
+    const [category, setSelectedCategory] = useState(null);
+    const [cards, setCards] = useState([]);
+    const [card, setSelectedCard] = useState(null);
+    const [date, setDate] = useState(getTodayDate);
+    const [timeframe, setTimeframe] = useState(0);
+    const [transactions, setTransactions] = useState([]);
+
+    const [currentSlide, setCurrentSlide] = useState(0);
+    const touchStartXRef = useRef(null);
+
+    const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+    const categoryDropdownRef = useRef(null);
+
+    const [cardModalOpen, setCardModalOpen] = useState(false);
+    const cardDropdownRef = useRef(null);
+
+    const [timeframeModalOpen, setTimeframeModalOpen] = useState(false);
+    const timeframeDropdownRef = useRef(null);
+
+    const [loading, setLoading] = useState(false);
+    const [categoriesLoading, setCategoriesLoading] = useState(true);
+    const [categoriesError, setCategoriesError] = useState("");
+    const [cardsLoading, setCardsLoading] = useState(true);
+    const [cardsError, setCardsError] = useState("");
+    const [transactionsLoading, setTransactionsLoading] = useState(true);
+    const [transactionsError, setTransactionsError] = useState("");
+    const [weeklyProfileIncome, setWeeklyProfileIncome] = useState(null);
+    const [statusMessage, setStatusMessage] = useState({ type: "", message: "" });
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+                setCategoryModalOpen(false);
+            }
+
+            if (cardDropdownRef.current && !cardDropdownRef.current.contains(event.target)) {
+                setCardModalOpen(false);
+            }
+
+            if (timeframeDropdownRef.current && !timeframeDropdownRef.current.contains(event.target)) {
+                setTimeframeModalOpen(false);
+            }
+        }
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        const loadCategories = async () => {
+            try {
+                const data = await fetchCategoriesApi();
+                const nextCategories = data || [];
+                setCategories(nextCategories);
+
+                if (nextCategories.length > 0) {
+                    setSelectedCategory((current) => current ?? nextCategories[0].id);
+                }
+            } catch (error) {
+                setCategoriesError(error.message);
+            } finally {
+                setCategoriesLoading(false);
+            }
+        };
+
+        loadCategories();
+    }, []);
+
+    useEffect(() => {
+        const loadCards = async () => {
+            try {
+                const data = await fetchCardsApi();
+                const nextCards = data || [];
+                setCards(nextCards);
+
+                if (nextCards.length > 0) {
+                    setSelectedCard((current) => current ?? nextCards[0].id);
+                }
+            } catch (error) {
+                setCardsError(error.message);
+            } finally {
+                setCardsLoading(false);
+            }
+        };
+
+        loadCards();
+    }, []);
+
+    useEffect(() => {
+        const loadTransactions = async () => {
+            try {
+                const data = await fetchTransactionsApi();
+                setTransactions(data || []);
+            } catch (error) {
+                setTransactionsError(error.message);
+            } finally {
+                setTransactionsLoading(false);
+            }
+        };
+
+        loadTransactions();
+    }, []);
+
+    useEffect(() => {
+        const loadProfileIncome = async () => {
+            try {
+                const income = await fetchProfileIncomeApi();
+                setWeeklyProfileIncome(Number.isFinite(Number(income)) ? Number(income) : null);
+            } catch {
+                // Keep timeline usable with transaction-derived income fallback.
+            }
+        };
+
+        loadProfileIncome();
+    }, []);
+
+    useEffect(() => {
+        if (!statusMessage.message) {
+            return undefined;
+        }
+
+        const timeoutId = window.setTimeout(() => {
+            setStatusMessage({ type: "", message: "" });
+        }, STATUS_MESSAGE_TIMEOUT_MS);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [statusMessage.message]);
+
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        setLoading(true);
+        setStatusMessage({ type: "", message: "" });
+
+        if (!category) {
+            setStatusMessage({ type: "error", message: "Please select a category." });
+            setLoading(false);
+            return;
+        }
+
+        if (!card) {
+            setStatusMessage({ type: "error", message: "Please select a card." });
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const createdTransaction = await createTransaction({
+                description,
+                amount: Number.parseFloat(amount),
+                date,
+                card_id: card,
+                category_id: category,
+                timeframe: timeframes[timeframe],
+            });
+
+            setTransactions((current) => [createdTransaction, ...current]);
+            setStatusMessage({ type: "success", message: "Transaction logged!" });
+            setDescription("");
+            setAmount("");
+            setDate(getTodayDate());
+        } catch (error) {
+            setStatusMessage({ type: "error", message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const timelineSlides = useMemo(() => {
+        const weekData = buildTimelineSnapshot({
+            range: getCurrentWeekRange(),
+            categories,
+            transactions,
+            view: "week",
+            weeklyProfileIncome,
+        });
+
+        const monthData = buildTimelineSnapshot({
+            range: getCurrentMonthRange(),
+            categories,
+            transactions,
+            view: "month",
+            weeklyProfileIncome,
+        });
+
+        const yearData = buildTimelineSnapshot({
+            range: getCurrentYearRange(),
+            categories,
+            transactions,
+            view: "year",
+            weeklyProfileIncome,
+        });
+
+        return [
+            { id: "week", title: "This Week", data: weekData },
+            { id: "month", title: "This Month", data: monthData },
+            { id: "year", title: "This Year", data: yearData },
+        ];
+    }, [categories, transactions, weeklyProfileIncome]);
+
+    const allSlides = [{ id: "new-transaction", title: "New Transaction" }, ...timelineSlides];
+    const slideCardClassName = "relative z-20 flex flex-1 h-full items-center justify-center bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm";
+
+    const goToSlide = (index) => {
+        if (index < 0) {
+            setCurrentSlide(allSlides.length - 1);
+            return;
+        }
+
+        if (index >= allSlides.length) {
+            setCurrentSlide(0);
+            return;
+        }
+
+        setCurrentSlide(index);
+        console.log(index);
+        console.log(allSlides[index]);
+    };
+
+    const handleTouchStart = (event) => {
+        touchStartXRef.current = event.touches[0]?.clientX ?? null;
+    };
+
+    const handleTouchEnd = (event) => {
+        const startX = touchStartXRef.current;
+        const endX = event.changedTouches[0]?.clientX ?? null;
+        touchStartXRef.current = null;
+
+        if (startX === null || endX === null) {
+            return;
+        }
+
+        const deltaX = endX - startX;
+        if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) {
+            return;
+        }
+
+        if (deltaX < 0) {
+            goToSlide(currentSlide + 1);
+            return;
+        }
+
+        goToSlide(currentSlide - 1);
+    };
+
+    return (
+        <div className="flex flex-col h-full items-center justify-start gap-2 z-100 w-full min-h-0">
+
+            <div
+                className="w-full flex-1 min-h-0"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+            >
+                <div
+                    className="flex transition-transform duration-300 ease-out h-full"
+                    style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+                >
+                    <div className={`w-full h-full shrink-0 ${allSlides[currentSlide].id === "new-transaction" ? "opacity-100" : "opacity-0"} transition-opacity duration-300 ease-out`}>
+                        <div className={slideCardClassName}>
+                            <NewTransactionView
+                                description={description}
+                                setDescription={setDescription}
+                                amount={amount}
+                                setAmount={setAmount}
+                                categories={categories}
+                                categoriesLoading={categoriesLoading}
+                                categoriesError={categoriesError}
+                                category={category}
+                                setSelectedCategory={setSelectedCategory}
+                                categoryModalOpen={categoryModalOpen}
+                                setCategoryModalOpen={setCategoryModalOpen}
+                                categoryDropdownRef={categoryDropdownRef}
+                                cards={cards}
+                                cardsLoading={cardsLoading}
+                                cardsError={cardsError}
+                                card={card}
+                                setSelectedCard={setSelectedCard}
+                                cardModalOpen={cardModalOpen}
+                                setCardModalOpen={setCardModalOpen}
+                                cardDropdownRef={cardDropdownRef}
+                                date={date}
+                                setDate={setDate}
+                                timeframe={timeframe}
+                                setTimeframe={setTimeframe}
+                                timeframeModalOpen={timeframeModalOpen}
+                                setTimeframeModalOpen={setTimeframeModalOpen}
+                                timeframeDropdownRef={timeframeDropdownRef}
+                                timeframes={timeframes}
+                                loading={loading}
+                                onSubmit={handleSubmit}
+                                statusMessage={statusMessage}
+                            />
+                        </div>
+                    </div>
+                    {timelineSlides.map((slide) => (
+                        <div key={slide.id} className="w-full h-full shrink-0">
+                            <div className={`${slideCardClassName} ${slide.id === allSlides[currentSlide].id ? "opacity-100" : "opacity-0"} transition-opacity duration-300 ease-out`}>
+                                <TimelineView
+                                    title={slide.title}
+                                    timelineData={slide.data}
+                                    loading={categoriesLoading || transactionsLoading}
+                                    error={categoriesError || transactionsError}
+                                    formatCurrency={formatCurrency}
+                                />
+                            </div>
+                        </div>
+                    ))}
+
+                </div>
+            </div>
+            <div className="flex items-center gap-1">
+                {allSlides.map((slide, index) => (
+                    <button
+                        key={slide.id}
+                        type="button"
+                        onClick={() => goToSlide(index)}
+                        aria-label={`Go to ${slide.title}`}
+                        className={`h-2 rounded-full transition-all ${currentSlide === index ? "w-5 bg-green-100" : "w-2 bg-green-100/45"}`}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
