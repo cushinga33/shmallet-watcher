@@ -93,3 +93,43 @@
         transform: translateY(85dvh);
     }
 }
+
+.cloudSlow {
+    animation: floatCloud 60s linear infinite;
+}
+.cloudMedium {
+    animation: floatCloud 45s linear infinite;
+}
+
+.cloudFast {
+    animation: floatCloud 30s linear infinite;
+}
+
+@keyframes floatCloud {
+    0% {
+        transform: translateX(50vw);
+    }
+    100% {
+        transform: translateX(-100vw);
+    }
+}
+
+
+.waveFast {
+    animation: wave 15s linear infinite;
+}
+.waveMedium {
+    animation: wave 30s linear infinite;
+}
+.waveSlow {
+    animation: wave 45s linear infinite;
+}
+@keyframes wave {
+    0% {
+        transform: translateX(50vw);
+    }
+    100% {
+        transform: translateX(-150vw);
+    }
+}
+

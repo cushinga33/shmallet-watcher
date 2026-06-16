@@ -86,7 +86,7 @@ export function Navbar({ email }) {
         {/* Brand/Logo */}
         <div className="flex items-center gap-2">
           <span className="text-4xl tracking-tight text-green-200 font-berky">
-            Shmallet Watcher
+            Frog Wallet
           </span>
         </div>
 

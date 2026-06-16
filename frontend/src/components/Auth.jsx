@@ -59,7 +59,7 @@ export function Auth() {
             <Background />
             <div className="w-full max-w-md p-8 bg-white rounded-3xl shadow-xl border border-slate-100 z-10">
                 <h2 className="text-3xl font-black text-center text-slate-800 mb-2">
-                    Shmallet Watcher
+                    Frog Wallet
                 </h2>
                 <p className="text-sm text-center text-slate-500 mb-6">
                     {isSignUp ? 'Create an account to meet your companion' : 'Sign in to check on your budget frog'}
