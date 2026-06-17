@@ -43,7 +43,15 @@ export function Auth() {
 
         try {
             if (isSignUp) {
-                const { error } = await supabase.auth.signUp({ email, password });
+                const redirectToUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
+
+                const { error } = await supabase.auth.signUp({ 
+                    email, 
+                    password,
+                    options: {
+                        redirectTo: `${redirectToUrl}` 
+                    }
+                });
                 if (error) throw error;
                 setSuccessMsg('Check your email for a confirmation link!');
             } else {
