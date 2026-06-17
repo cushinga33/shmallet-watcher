@@ -18,13 +18,13 @@ export function FrogState({ weightState = 'regular', happiness = 100 }) {
   const current = stateMap[weightState] || stateMap.regular;
 
   return (
-    <div className="flex flex-col items-center h-full w-full">
+    <div className="flex flex-col items-center w-full">
       {/* Frog Graphic Frame */}
-      <div className="relative flex items-center justify-center h-full w-full">
+      <div className="flex items-center justify-center h-full w-full">
         <img 
           src={current.src} 
           alt="Your Budget Frog Companion" 
-          className="w-[75%] h-[65%] object-contain transition-transform duration-300 group-hover:scale-105 z-1"
+          className="w-[65%] h-[65%] object-contain absolute -bottom-10 z-1"
         />
       </div>
     </div>

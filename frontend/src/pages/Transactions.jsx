@@ -248,7 +248,7 @@ export function Transactions() {
     const colors = userColorChoices;
     return (
         <div className="flex flex-1 w-full max-h-screen items-center justify-start flex-col gap-2">
-            <div className="flex flex-col bg-linear-to-br from-green-100/30 to-green-200/10 rounded-t-4xl py-2 px-1 w-full h-full overflow-y-auto border-green-100/15 border-1 backdrop-blur-sm shadow-sm backdrop-brightness-95">
+            <div className="flex flex-col py-2 px-1 w-full h-full overflow-y-auto">
                 <div className="w-full flex items-center justify-between gap-2 px-2">
                     <div className="w-10" />
                     <div className="flex items-center justify-center gap-2">
@@ -262,14 +262,14 @@ export function Transactions() {
                     </div>
                     <button
                         type="button"
-                        className="w-10 h-10 rounded-xl bg-green-100 text-slate-700 flex items-center justify-center shadow-xs active:scale-95 transition-transform"
+                        className="w-10 h-10 rounded-xl bg-green-100 text-green-500 flex items-center justify-center shadow-xs active:scale-95 transition-transform"
                         aria-label="Open transaction filters"
                         onClick={() => {
                             setDraftFilters(filters);
                             setFilterModalOpen(true);
                         }}
                     >
-                        <FaFilter className="text-lg" />
+                        <FaFilter className="text-lg" color="" />
                     </button>
                 </div>
 

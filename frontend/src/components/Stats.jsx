@@ -529,7 +529,8 @@ export function Stats() {
     }, [categories, transactions, weeklyProfileIncome]);
 
     const allSlides = [{ id: "new-transaction", title: "New Transaction" }, ...timelineSlides];
-    const slideCardClassName = "relative z-20 flex flex-1 h-full items-center justify-center bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm";
+    const isNewTransactionSlideActive = allSlides[currentSlide]?.id === "new-transaction";
+    const slideCardClassName = "relative z-20 flex flex-1 max-h-[60dvh] items-center justify-center bg-linear-to-br from-green-100/30 to-green-200/10 rounded-4xl p-3 w-full border-green-100/15 border-1 backdrop-blur-sm shadow-sm";
 
     const goToSlide = (index) => {
         if (index < 0) {
@@ -574,10 +575,10 @@ export function Stats() {
     };
 
     return (
-        <div className="flex flex-col h-full items-center justify-start gap-2 z-100 w-full min-h-0">
+        <div className="flex flex-col items-center justify-start gap-2 z-100 w-full">
 
             <div
-                className="w-full flex-1 min-h-0"
+                className="w-full"
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
             >
@@ -585,7 +586,7 @@ export function Stats() {
                     className="flex transition-transform duration-300 ease-out h-full"
                     style={{ transform: `translateX(-${currentSlide * 100}%)` }}
                 >
-                    <div className={`w-full h-full shrink-0 ${allSlides[currentSlide].id === "new-transaction" ? "opacity-100" : "opacity-0"} transition-opacity duration-300 ease-out`}>
+                    <div className={`w-full shrink-0 ${allSlides[currentSlide].id === "new-transaction" ? "opacity-100" : "opacity-0"} transition-opacity duration-300 ease-out`}>
                         <div className={slideCardClassName}>
                             <NewTransactionView
                                 description={description}
@@ -631,12 +632,14 @@ export function Stats() {
                                     loading={categoriesLoading || transactionsLoading}
                                     error={categoriesError || transactionsError}
                                     formatCurrency={formatCurrency}
+                                    isCompactHeight={isNewTransactionSlideActive}
                                 />
                             </div>
                         </div>
                     ))}
 
                 </div>
+
             </div>
             <div className="flex items-center gap-1">
                 {allSlides.map((slide, index) => (
