@@ -2,7 +2,7 @@ import React, { useMemo} from "react";
 import cloud1 from "../assets/Cloud1.svg";
 import cloud2 from "../assets/Cloud2.svg";
 import cloud3 from "../assets/Cloud3.svg";
-import waveVideo from "../assets/wave2.webm";
+import waveVideo from "../assets/wave2.mp4";
 export function Background() {
 
     const cloudAssets = [cloud1, cloud2, cloud3];
