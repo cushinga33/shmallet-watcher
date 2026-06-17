@@ -45,7 +45,7 @@ function App() {
       <Background />
       <div className="flex flex-col h-full w-full relative z-10">
         <Navbar email={session.user.email} />
-        <main className="h-full w-full flex overflow-hidden">
+        <main className="relative h-full w-full flex overflow-hidden">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="transactions" element={<Transactions />} />

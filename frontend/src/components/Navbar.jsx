@@ -81,7 +81,7 @@ export function Navbar({ email }) {
   };
 
   return (
-    <nav className="w-full z-50 p-4 sticky top-0">
+    <nav className="w-full z-50 px-4 py-1 sticky top-0">
       <div className="max-w-6xl mx-auto flex justify-between items-center">
         {/* Brand/Logo */}
         <div className="flex items-center gap-2">

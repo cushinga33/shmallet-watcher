@@ -3,10 +3,12 @@ import { getCategoryIconByName } from "../../assets/categoryIcons";
 import { userColorChoices } from "../../assets/userColorChoices";
 import { FaDollarSign } from "react-icons/fa";
 
-export function TimelineView({ title, timelineData, loading, error, formatCurrency }) {
+export function TimelineView({ title, timelineData, loading, error, formatCurrency, isCompactHeight = false }) {
     const [expandedRowId, setExpandedRowId] = React.useState(null);
+    const maxHeightClass = isCompactHeight ? "max-h-[30dvh]" : "max-h-[60dvh]";
+
     return (
-        <div className="w-full h-full flex flex-col gap-3">
+        <div className={`w-full ${maxHeightClass} flex flex-col gap-3 py-3`}>
             <div className="flex items-center justify-center">
                 <h1 className="text-3xl font-berky text-green-200 text-center">{title}</h1>
             </div>
@@ -36,7 +38,7 @@ export function TimelineView({ title, timelineData, loading, error, formatCurren
                         </div>
                     </div>
 
-                    <div className="flex-1 h-full overflow-y-hidden">
+                    <div className="flex-1 h-full overflow-y-auto">
                         <div className="grid grid-cols-12 px-1 pb-2 text-sm font-bold text-slate-600 tracking-wide">
 
                             <span className="col-span-3">Category</span>
