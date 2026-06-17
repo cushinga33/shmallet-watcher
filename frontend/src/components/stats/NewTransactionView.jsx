@@ -60,7 +60,7 @@ export function NewTransactionView({
                             <FaChevronDown className={`ml-2 shrink-0 ${categoryModalOpen ? "transform rotate-180" : ""}`} />
                         </button>
                         {categoryModalOpen && !categoriesLoading && !categoriesError && (
-                            <div className="absolute top-full left-0 z-40 bg-green-100 rounded-xl shadow-lg py-1 mt-2 w-full">
+                            <div className="absolute top-full left-0 z-40 bg-green-100 rounded-xl shadow-lg py-1 mt-2 w-full max-h-[50dvh] overflow-y-auto">
                                 {categories.map((categoryItem) => (
                                     <div key={categoryItem.id} className="px-4 py-2.5 rounded cursor-pointer truncate whitespace-nowrap" title={categoryItem.name} onClick={() => { setSelectedCategory(categoryItem.id); setCategoryModalOpen(false); }}>
                                         {categoryItem.name}
@@ -89,7 +89,7 @@ export function NewTransactionView({
                         )}
                     </div>
 
-                    <div className="flex flex-col items-center justify-center w-full col-span-4">
+                    <div className="flex flex-col items-center justify-center w-full col-span-4 min-w-0">
                         <h1 className="text-lg self-start w-full font-semibold text-green-200">Date</h1>
                         <input type="date" className="bg-green-100 rounded-xl px-4 py-2 w-full text-right shadow-sm" value={date} onChange={(event) => setDate(event.target.value)} />
                     </div>
