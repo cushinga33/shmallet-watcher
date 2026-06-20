@@ -2,7 +2,7 @@ import React, { useMemo} from "react";
 import cloud1 from "../assets/Cloud1.svg";
 import cloud2 from "../assets/Cloud2.svg";
 import cloud3 from "../assets/Cloud3.svg";
-import waveVideo from "../assets/wave2.mp4";
+import waveAsset from "../assets/Wave.svg";
 export function Background() {
 
     const cloudAssets = [cloud1, cloud2, cloud3];
@@ -86,17 +86,12 @@ export function Background() {
                     className="absolute origin-bottom-left pointer-events-none"
                     style={wave.wrapperStyle}
                 >
-                    <video 
-                        autoPlay 
-                        loop 
-                        muted 
-                        playsInline
-                        preload="metadata"
+                    <img
+                        src={waveAsset}
+                        alt="Wave"
                         className={wave.className}
                         style={wave.videoStyle}
-                    >
-                        <source src={waveVideo} type="video/webm" />
-                    </video>
+                    />
                 </div>
             ))}
         </div>

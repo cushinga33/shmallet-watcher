@@ -5,6 +5,7 @@ import FrogSkinny from '../assets/FrogSkinny.svg';
 import FrogRegular from '../assets/FrogRegular.svg';
 import FrogMediumFat from '../assets/FrogMediumFat.svg';
 import FrogFat from '../assets/FrogFat.svg';
+import Lilypad from '../assets/Lilypad.svg';
 
 const stateMap = {
   super_skinny: { src: FrogSuperSkinny, label: "Super Skinny / Underfed", color: "text-rose-500" },
@@ -18,15 +19,16 @@ export function FrogState({ weightState = 'regular', happiness = 100 }) {
   const current = stateMap[weightState] || stateMap.regular;
 
   return (
-    <div className="flex flex-col items-center w-full">
+    <div className="relative self-end h-[50dvh] w-dvw floatAnimation">
       {/* Frog Graphic Frame */}
-      <div className="flex items-center justify-center h-full w-full">
         <img 
           src={current.src} 
           alt="Your Budget Frog Companion" 
-          className="w-[65%] h-[65%] object-contain absolute -bottom-10 z-1"
+          className="transfor object-contain aspect-square absolute -bottom-5 z-1"
+          style={weightState === 'super_fat' || weightState === 'fat' ? { transform: 'scale(.75)' } : {'scale': '0.65'}}
         />
-      </div>
+        <img src={Lilypad} alt="Lilypad" className="absolute bottom-0 object-contain" />
+
     </div>
   );
 }

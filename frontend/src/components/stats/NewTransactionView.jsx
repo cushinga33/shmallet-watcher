@@ -91,7 +91,7 @@ export function NewTransactionView({
 
                     <div className="flex flex-col items-center justify-center w-full col-span-4 min-w-0">
                         <h1 className="text-lg self-start w-full font-semibold text-green-200">Date</h1>
-                        <input type="date" className="bg-green-100 rounded-xl px-4 py-2 w-full text-right shadow-sm" value={date} onChange={(event) => setDate(event.target.value)} />
+                        <input type="date" className="bg-green-100 rounded-xl px-4 py-2 appearance-none [-webkit-appearance:none] w-full shadow-sm" value={date} onChange={(event) => setDate(event.target.value)} />
                     </div>
 
                     <div className="flex flex-col items-center justify-center w-full col-span-4 relative" ref={timeframeDropdownRef}>
