@@ -303,7 +303,7 @@ export function Transactions() {
                 ) : filteredTransactions.length === 0 ? (
                     <div className="p-8 text-slate-600 font-bold w-full text-center">No transactions match those filters.</div>
                 ) : (
-                    <ul className="w-full flex flex-col overflow-y-auto mt-4 backdrop-blur-sm rounded-xl bg-green-100/10">
+                    <ul className="w-full flex flex-col overflow-y-auto mt-4">
                         {filteredTransactions.map((transaction) => {
                             const resolvedCategory = getCategoryForTransaction(transaction);
                             const resolvedCard = getCardForTransaction(transaction);
@@ -345,7 +345,6 @@ export function Transactions() {
 
                                     </div>
                                 </button>
-                                <div className="h-[1px] bg-green-100/15 rounded-full" />
 
                             </li>
                             );
