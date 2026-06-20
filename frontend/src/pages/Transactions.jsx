@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { FrogState } from '../components/FrogState';
+import FrogFat from '../assets/FrogFat.svg';
 import Lilypad from '../assets/Lilypad.svg';
 import { getCategoryIconByName } from "../assets/categoryIcons";
 import { userColorChoices } from "../assets/userColorChoices";
@@ -8,6 +8,7 @@ import { fetchTransactions as fetchTransactionsApi } from "../services/transacti
 import { fetchCategories as fetchCategoriesApi } from "../services/categoryService";
 import { fetchCards as fetchCardsApi } from "../services/cardService";
 import { EditTransactionModal } from "../components/EditTransactionModal";
+
 
 const MODAL_ANIMATION_MS = 300;
 
@@ -248,7 +249,7 @@ export function Transactions() {
     const colors = userColorChoices;
     return (
         <div className="flex flex-1 w-full max-h-screen items-center justify-start flex-col gap-2">
-            <div className="flex flex-col py-2 px-1 w-full h-full overflow-y-auto">
+            <div className="flex flex-col py-2 w-full h-full overflow-y-auto">
                 <div className="w-full flex items-center justify-between gap-2 px-2">
                     <div className="w-10" />
                     <div className="flex items-center justify-center gap-2">
@@ -257,7 +258,7 @@ export function Transactions() {
                         </h1>
                         <div className="w-12 h-12 -mt-2 relative floatAnimationSmall">
                             <img src={Lilypad} alt="Lilypad" className="absolute -bottom-3 w-full h-full object-contain" />
-                            <FrogState weightState="super_fat" happiness={80} />
+                            <img src={FrogFat} alt="Frog" className="absolute transform scale-75 h-full object-contain" />
                         </div>
                     </div>
                     <button
@@ -289,7 +290,7 @@ export function Transactions() {
                         ))}
                         <button
                             type="button"
-                            className="bg-rose-400/90 text-green-100 rounded-full px-3 py-1 text-xs font-bold"
+                            className="bg-rose-400/90 text-slate-600 rounded-full px-3 py-1 text-xs font-bold"
                             onClick={clearAllFilters}
                         >
                             Clear all
@@ -298,11 +299,11 @@ export function Transactions() {
                 )}
 
                 {transactions.length === 0 ? (
-                    <div className="p-8 text-green-100 font-bold w-full text-center">No transactions yet ...</div>
+                    <div className="p-8 text-slate-600 font-bold w-full text-center">No transactions yet ...</div>
                 ) : filteredTransactions.length === 0 ? (
-                    <div className="p-8 text-green-100 font-bold w-full text-center">No transactions match those filters.</div>
+                    <div className="p-8 text-slate-600 font-bold w-full text-center">No transactions match those filters.</div>
                 ) : (
-                    <ul className="w-full max-w-3xl flex flex-col overflow-y-auto mt-4">
+                    <ul className="w-full flex flex-col overflow-y-auto mt-4 backdrop-blur-sm rounded-xl bg-green-100/10">
                         {filteredTransactions.map((transaction) => {
                             const resolvedCategory = getCategoryForTransaction(transaction);
                             const resolvedCard = getCardForTransaction(transaction);
@@ -310,7 +311,7 @@ export function Transactions() {
                             return (
                             <li key={transaction.id} className="px-1.5 py-0.5">
                                 <button
-                                    className="w-full h-full flex flex-col"
+                                    className="w-full h-full flex flex-col bg-green-100/75 rounded-xl items-center justify-between gap-2 "
                                     onClick={() => {
                                         if (editTransactionModalTimeoutRef.current) {
                                             window.clearTimeout(editTransactionModalTimeoutRef.current);
@@ -322,24 +323,24 @@ export function Transactions() {
                                         setEditTransactionModal(true);
                                     }}
                                 >
-                                    <div className="flex justify-between">
-                                        <div className="flex items-center gap-2 w-3/4">
-                                            <div className="w-8 h-8 rounded-full aspect-square flex items-center justify-center bg-green-100">
+                                    <div className="flex justify-between w-full items-center px-2">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 aspect-square flex items-center justify-center">
                                                 {getCategoryIcon(resolvedCategory?.icon, colors[resolvedCategory?.color])}
                                             </div>
                                             <div className="flex flex-col items-start">
-                                                <span className="font-semibold text-green-100 text-xl truncate max-w-[190px] sm:max-w-[260px]">{transaction.description}</span>
-                                                <span className="text-[11px] text-green-100/80 truncate max-w-[190px] sm:max-w-[260px]">
+                                                <span className="font-semibold text-slate-600 text-md truncate max-w-[190px] sm:max-w-[260px]">{transaction.description}</span>
+                                                <span className="text-xs text-slate-600 truncate max-w-[190px] sm:max-w-[260px]">
                                                     {resolvedCard?.name || "No card"}
                                                     {transaction.timeframe && transaction.timeframe !== "Once" ? ` • Recurring ${transaction.timeframe}` : " • One-Time"}
                                                 </span>
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end">
-                                            <div className={`font-bold text-lg flex gap-1 items-center ${resolvedCategory?.type === "income" ? "text-green-300" : "text-green-100" }`}>
+                                            <div className={`font-bold text-md flex gap-1 items-center ${resolvedCategory?.type === "income" ? "text-green-300" : "text-slate-600" }`}>
                                                 $ {transaction.amount} {resolvedCategory?.type === "income" ? "+" : "-"}
                                             </div>
-                                            <div className="text-xs text-green-100 text-right">{transaction.date}</div>
+                                            <div className="text-xs text-slate-600 text-right">{transaction.date}</div>
                                         </div>
 
                                     </div>
